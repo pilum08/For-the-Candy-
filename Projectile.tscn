@@ -1,0 +1,17 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://Projectile.gd" id="1_e7peq"]
+[ext_resource type="Texture2D" path="res://Sprites/stone.bmp" id="2_1cf02"]
+
+[node name="Projectile" type="Area2D" unique_id=1336172631]
+collision_layer = 8
+collision_mask = 6
+script = ExtResource("1_e7peq")
+
+[node name="Sprite" type="Sprite2D" parent="." unique_id=758138203]
+texture_filter = 1
+scale = Vector2(0.35, 0.35)
+texture = ExtResource("2_1cf02")
+
+[node name="Notifier" type="VisibleOnScreenNotifier2D" parent="." unique_id=2081901605]
+rect = Rect2(-75, -75, 150, 150)
