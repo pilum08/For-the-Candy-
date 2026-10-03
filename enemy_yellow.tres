@@ -1,0 +1,113 @@
+[gd_resource type="Resource" format=3]
+
+[ext_resource type="Script" path="res://MobRigData.gd" id="1_rig"]
+
+[resource]
+script = ExtResource("1_rig")
+parts = [{
+"name": "Body",
+"texture": "",
+"parent": "",
+"attach_pos": Vector2(1, -139),
+"pivot_px": Vector2(0, 0),
+"z_index": 0
+}, {
+"name": "ArmL",
+"texture": "res://Sprites/enemy/Enemy_l_arm.png",
+"parent": "Body",
+"attach_pos": Vector2(-137.3, -106.8),
+"pivot_px": Vector2(105.7, 59.2),
+"z_index": 0
+}, {
+"name": "ArmR",
+"texture": "res://Sprites/enemy/Enemy_r_arm.png",
+"parent": "Body",
+"attach_pos": Vector2(143.2, -116.3),
+"pivot_px": Vector2(7.2, 60.7),
+"z_index": 0
+}, {
+"name": "LegL",
+"texture": "res://Sprites/enemy/Enemy_l_leg.png",
+"parent": "Body",
+"attach_pos": Vector2(-99.6, 56.3),
+"pivot_px": Vector2(20.4, 5.3),
+"z_index": 0
+}, {
+"name": "LegR",
+"texture": "res://Sprites/enemy/Enemy_r_leg.png",
+"parent": "Body",
+"attach_pos": Vector2(112, 69.3),
+"pivot_px": Vector2(21, 6.3),
+"z_index": 0
+}, {
+"name": "Pants",
+"texture": "res://Sprites/enemy/Enemy_pants.png",
+"parent": "Body",
+"attach_pos": Vector2(-3, -32),
+"pivot_px": Vector2(207, 35),
+"z_index": 0
+}, {
+"name": "Torso",
+"texture": "res://Sprites/enemy/Enemy_body.png",
+"parent": "Body",
+"attach_pos": Vector2(0, 0),
+"pivot_px": Vector2(166, 251),
+"z_index": 0
+}, {
+"name": "Head",
+"texture": "res://Sprites/enemy/Enemy_head.png",
+"parent": "Body",
+"attach_pos": Vector2(62, -231),
+"pivot_px": Vector2(340, 357),
+"z_index": 0
+}, {
+"name": "Face",
+"texture": "res://Sprites/enemy/Enemy_idle_face.png",
+"parent": "Head",
+"attach_pos": Vector2(0, 0),
+"pivot_px": Vector2(317, 301),
+"z_index": 0
+}]
+art_scale = 0.21
+walk_poses = [{
+"body_pos": Vector2(0.0, -2.0), "body_rot": -2.0,
+"head_pos": Vector2(0.0, 0.0), "head_rot": 2.0,
+"pants_pos": Vector2(0.0, 0.0), "pants_rot": -3.0,
+"leg_l_pos": Vector2(0.0, 2.0), "leg_l_rot": -16.0,
+"leg_r_pos": Vector2(0.0, 2.0), "leg_r_rot": 14.0,
+"arm_l_rot": 13.0, "arm_r_rot": 11.0
+}, {
+"body_pos": Vector2(0.0, -5.0), "body_rot": 0.0,
+"head_pos": Vector2(0.0, -1.0), "head_rot": -1.0,
+"pants_pos": Vector2(0.0, 1.0), "pants_rot": 0.0,
+"leg_l_pos": Vector2(0.0, 0.0), "leg_l_rot": 2.0,
+"leg_r_pos": Vector2(0.0, 0.0), "leg_r_rot": -3.0,
+"arm_l_rot": -8.0, "arm_r_rot": -8.0
+}, {
+"body_pos": Vector2(0.0, -2.0), "body_rot": 2.0,
+"head_pos": Vector2(0.0, 0.0), "head_rot": -2.0,
+"pants_pos": Vector2(0.0, 0.0), "pants_rot": 3.0,
+"leg_l_pos": Vector2(0.0, 2.0), "leg_l_rot": 15.0,
+"leg_r_pos": Vector2(0.0, 2.0), "leg_r_rot": -16.0,
+"arm_l_rot": -12.0, "arm_r_rot": -9.0
+}]
+idle_poses = [{
+"body_pos": Vector2(0.0, 0.0), "body_rot": 0.0,
+"head_pos": Vector2(0.0, 0.0), "head_rot": -1.0,
+"pants_pos": Vector2(0.0, 0.0), "pants_rot": 1.0,
+"leg_l_pos": Vector2(0.0, 0.0), "leg_l_rot": 0.0,
+"leg_r_pos": Vector2(0.0, 0.0), "leg_r_rot": 0.0,
+"arm_l_rot": 2.0, "arm_r_rot": -2.0
+}, {
+"body_pos": Vector2(0.0, -1.0), "body_rot": 1.0,
+"head_pos": Vector2(0.0, -1.0), "head_rot": 1.0,
+"pants_pos": Vector2(0.0, 1.0), "pants_rot": -1.0,
+"leg_l_pos": Vector2(0.0, 1.0), "leg_l_rot": 1.0,
+"leg_r_pos": Vector2(0.0, 1.0), "leg_r_rot": -1.0,
+"arm_l_rot": -3.0, "arm_r_rot": 3.0
+}]
+pose_fps = 7.0
+idle_pose_fps = 2.0
+face_idle = "res://Sprites/enemy/Enemy_idle_face.png"
+face_damage = "res://Sprites/enemy/Enemy_damage_face.png"
+corpse_texture = "res://Sprites/enemy/Enemy_corpse.png"

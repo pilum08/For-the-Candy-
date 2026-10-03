@@ -8,6 +8,13 @@ extends RigidBody2D
 ## зеркалим дочерний узел Visual (scale.x = -1), а не сам RigidBody2D (иначе поехала
 ## бы физика). Коллизия живёт в отдельном узле и тоже зеркалится сдвигом.
 ##
+## ВИД И МАСШТАБ — из паспорта моба (поле mob_rig, например enemy_yellow.tres):
+##   картинка ← MobRigData.corpse_texture (пусто — картинка из этой сцены),
+##   масштаб  ← MobRigData.art_scale (тот же, что у живого моба).
+## Поэтому труп нового вида моба = копия этой сцены со своим mob_rig. Но ГЕОМЕТРИЯ ниже
+## (пивот картинки и коллизия) общая для всех трупов: под сильно другой арт правь
+## CORPSE_PIVOT и CAPSULE_* — или заведи рядом второй набор констант.
+##
 ## ГЕОМЕТРИЯ — снята с Enemy_corpse.png (784x589), в её пикселях:
 ##   силуэт (1,1)..(783,588); голова (жёлтое) x 305..710; футболка x 62..369;
 ##   штаны x 62..182; ось тела по y ≈ 284; низ силуэта y = 588 (подбородок головы —
@@ -25,8 +32,16 @@ extends RigidBody2D
 ## mass / linear_damp / angular_damp — это штатные свойства RigidBody2D: они уже
 ## есть в инспекторе, отдельные @export не нужны (был бы конфликт имён).
 
+const MobRigData := preload("res://MobRigData.gd")   # тип паспорта моба (нужен только для типов)
+
+@export_group("Вид моба")
+## Паспорт моба (MobRigData, например enemy_yellow.tres): отсюда труп берёт картинку
+## (corpse_texture) и масштаб (art_scale). Пусто — вид целиком из этой сцены.
+@export var mob_rig: MobRigData
+
 @export_group("Размер")
-## Тот же масштаб, что у врага (Enemy.enemy_scale): сцена трупа его получает в setup().
+## Масштаб трупа: при смерти врага его задаёт setup() (масштаб самого моба), а у трупа,
+## выставленного в сцене руками, — паспорт моба (MobRigData.art_scale) или это значение.
 @export_range(0.05, 2.0, 0.01) var enemy_scale: float = 0.21
 
 @export_group("Прочее")
@@ -97,10 +112,28 @@ var _saved_valid: bool = false
 
 
 func _ready() -> void:
+	_apply_rig()   # вид из паспорта моба (если он задан) — до масштаба: он берётся оттуда же
 	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	save_z()      # «как в сцене»: относительность z и «рисоваться за родителем»
 	restore_z()   # и мировой z по явному правилу corpse_world_z (труп на земле — позади героя)
 	_apply_scale()
+
+
+## Вид из паспорта моба: картинка трупа (corpse_texture) и масштаб (art_scale). Зовётся в _ready.
+## Смерть врага переписывает масштаб в setup() — это то же самое число, если .tres один и тот же
+## (Enemy отдаёт visual.art_scale, то есть MobRigData.art_scale).
+func _apply_rig() -> void:
+	if mob_rig == null:
+		return
+	enemy_scale = mob_rig.art_scale
+	var path := mob_rig.corpse_texture
+	if path.is_empty():
+		return   # про картинку паспорт ничего не сказал — оставляем ту, что стоит в сцене
+	var tex := load(path) as Texture2D
+	if tex == null:
+		push_warning("Corpse (%s): не загрузилась текстура трупа %s" % [name, path])
+		return
+	sprite.texture = tex
 
 
 ## Вызывает Enemy при смерти: масштаб, куда смотрел враг, импульс удара.

@@ -32,6 +32,7 @@ position = Vector2(-1.05, -65.1)
 shape = SubResource("RectangleShape2D_hit")
 
 [node name="Visual" type="Node2D" parent="."]
+modulate = Color(1, 0.3, 0.3, 1)
 texture_filter = 1
 scale = Vector2(0.21, 0.21)
 script = ExtResource("2_visual")

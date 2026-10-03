@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="SpawnTable" format=3 uid="uid://w67fj8barq7m"]
+
+[ext_resource type="Script" uid="uid://dkykexmw2qg2p" path="res://SpawnTable.gd" id="1_table"]
+[ext_resource type="Script" uid="uid://cvahmnrr0swng" path="res://SpawnEntry.gd" id="2_entry"]
+[ext_resource type="PackedScene" path="res://Enemy.tscn" id="3_yellow"]
+[ext_resource type="PackedScene" path="res://Enemy_test.tscn" id="4_test"]
+
+[sub_resource type="Resource" id="SpawnEntry_yellow"]
+script = ExtResource("2_entry")
+mob_scene = ExtResource("3_yellow")
+
+[sub_resource type="Resource" id="SpawnEntry_test"]
+script = ExtResource("2_entry")
+mob_scene = ExtResource("4_test")
+
+[resource]
+script = ExtResource("1_table")
+entries = [SubResource("SpawnEntry_yellow"), SubResource("SpawnEntry_test")]

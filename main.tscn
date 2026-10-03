@@ -2,8 +2,16 @@
 
 [ext_resource type="PackedScene" path="res://Player.tscn" id="1_efxa6"]
 [ext_resource type="Script" uid="uid://bvihbd470mlxn" path="res://CameraFollow.gd" id="2_camfk"]
-[ext_resource type="PackedScene" path="res://Enemy.tscn" id="3_enemy"]
 [ext_resource type="PackedScene" path="res://Pit.tscn" id="4_pit"]
+[ext_resource type="Script" uid="uid://bmwsqnpmihyaj" path="res://MobSpawner.gd" id="5_spawner"]
+[ext_resource type="Resource" uid="uid://w67fj8barq7m" path="res://spawn_table_level1.tres" id="6_table"]
+[ext_resource type="Script" uid="uid://dj7bpabc0btxc" path="res://WaveManager.gd" id="7_waves"]
+[ext_resource type="Script" uid="uid://cjli8ib0fh6j8" path="res://WaveData.gd" id="8_efxa6"]
+[ext_resource type="Resource" path="res://wave_1.tres" id="8_wave1"]
+[ext_resource type="Resource" path="res://wave_2.tres" id="9_wave2"]
+[ext_resource type="Resource" path="res://wave_3.tres" id="10_wave3"]
+[ext_resource type="PackedScene" path="res://EncounterTrigger.tscn" id="11_encounter"]
+[ext_resource type="PackedScene" path="res://WaveTrigger.tscn" id="12_wavetrig"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ryguw"]
 size = Vector2(530, 120)
@@ -11,14 +19,8 @@ size = Vector2(530, 120)
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_groundR"]
 size = Vector2(2790, 120)
 
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_d13ii"]
-size = Vector2(520, 60)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_1u8w0"]
-size = Vector2(420, 60)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_0odxb"]
-size = Vector2(300, 60)
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_wave_wall"]
+size = Vector2(120, 2400)
 
 [node name="World" type="Node2D" unique_id=659129046]
 
@@ -53,72 +55,67 @@ shape = SubResource("RectangleShape2D_groundR")
 position = Vector2(-1130, 0)
 required_corpses = 3
 
-[node name="PlatformA" type="StaticBody2D" parent="." unique_id=958948705]
-visible = false
-position = Vector2(-450, -170)
-collision_layer = 4
-collision_mask = 0
+[node name="Fortification" type="Node2D" parent="."]
+position = Vector2(850, 0)
 
-[node name="Shape" type="CollisionShape2D" parent="PlatformA" unique_id=112206461]
-shape = SubResource("RectangleShape2D_d13ii")
+[node name="Visual" type="ColorRect" parent="Fortification"]
+offset_left = -70.0
+offset_top = -620.0
+offset_right = 70.0
+offset_bottom = 0.0
+color = Color(0.34, 0.31, 0.36, 1)
 
-[node name="Visual" type="ColorRect" parent="PlatformA" unique_id=593067695]
-offset_left = -260.0
-offset_top = -30.0
-offset_right = 260.0
-offset_bottom = 30.0
-color = Color(0.75, 0.78, 0.86, 1)
-
-[node name="PlatformB" type="StaticBody2D" parent="." unique_id=78884142]
-visible = false
-position = Vector2(520, -360)
-collision_layer = 4
-collision_mask = 0
-
-[node name="Shape" type="CollisionShape2D" parent="PlatformB" unique_id=1788411816]
-shape = SubResource("RectangleShape2D_1u8w0")
-
-[node name="Visual" type="ColorRect" parent="PlatformB" unique_id=1507279803]
-offset_left = -210.0
-offset_top = -30.0
-offset_right = 210.0
-offset_bottom = 30.0
-color = Color(0.75, 0.78, 0.86, 1)
-
-[node name="PlatformC" type="StaticBody2D" parent="." unique_id=2032661544]
-visible = false
-position = Vector2(0, -560)
-collision_layer = 4
-collision_mask = 0
-
-[node name="Shape" type="CollisionShape2D" parent="PlatformC" unique_id=986205876]
-shape = SubResource("RectangleShape2D_0odxb")
-
-[node name="Visual" type="ColorRect" parent="PlatformC" unique_id=1175376610]
-offset_left = -150.0
-offset_top = -30.0
-offset_right = 150.0
-offset_bottom = 30.0
-color = Color(0.75, 0.78, 0.86, 1)
+[node name="Label" type="Label" parent="Fortification"]
+offset_left = -190.0
+offset_top = -710.0
+offset_right = 190.0
+offset_bottom = -650.0
+theme_override_font_sizes/font_size = 48
+text = "Укрепление"
+horizontal_alignment = 1
 
 [node name="Player" parent="." unique_id=1694100496 instance=ExtResource("1_efxa6")]
 position = Vector2(0, -140)
 idle_pose_fps = 2.0
-death_hold_time = 0.2
+death_hold_time = 0.3
 
-[node name="Camera" type="Camera2D" parent="Player" unique_id=1797260378]
+[node name="Camera" type="Camera2D" parent="Player" groups=["camera"] unique_id=1797260378]
 position = Vector2(0, -140)
 limit_left = -2000
 position_smoothing_enabled = true
 position_smoothing_speed = 8.0
 script = ExtResource("2_camfk")
 
-[node name="Enemy1" parent="." unique_id=1067276758 instance=ExtResource("3_enemy")]
-position = Vector2(420, 0)
-max_hp = 10.0
+[node name="Encounter1" parent="." instance=ExtResource("11_encounter")]
+position = Vector2(250, 0)
+count = 1
+spawner = NodePath("../MobSpawner")
 
-[node name="Enemy2" parent="." unique_id=1457346130 instance=ExtResource("3_enemy")]
-position = Vector2(760, 0)
+[node name="Encounter2" parent="." instance=ExtResource("11_encounter")]
+position = Vector2(500, 0)
+count = 2
+spawner = NodePath("../MobSpawner")
 
-[node name="Enemy3" parent="." unique_id=1176723695 instance=ExtResource("3_enemy")]
-position = Vector2(1100, 0)
+[node name="WaveTrigger" parent="." instance=ExtResource("12_wavetrig")]
+position = Vector2(750, 0)
+wave_manager = NodePath("../WaveManager")
+camera = NodePath("../Player/Camera")
+left_wall = NodePath("../PlayersWall")
+
+[node name="PlayersWall" type="StaticBody2D" parent="." groups=["wave_wall"]]
+position = Vector2(430, 0)
+collision_layer = 4
+collision_mask = 0
+
+[node name="Shape" type="CollisionShape2D" parent="PlayersWall"]
+shape = SubResource("RectangleShape2D_wave_wall")
+disabled = true
+
+[node name="MobSpawner" type="Node" parent="." groups=["mob_spawner"] unique_id=364961159]
+script = ExtResource("5_spawner")
+default_table = ExtResource("6_table")
+
+[node name="WaveManager" type="Node" parent="." groups=["wave_manager"] unique_id=1099234511]
+script = ExtResource("7_waves")
+waves = Array[ExtResource("8_efxa6")]([ExtResource("8_wave1"), ExtResource("9_wave2"), ExtResource("10_wave3")])
+spawner = NodePath("../MobSpawner")

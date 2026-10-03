@@ -1,0 +1,10 @@
+[gd_resource type="Resource" format=3]
+
+[ext_resource type="Script" uid="uid://cjli8ib0fh6j8" path="res://WaveData.gd" id="1_wave"]
+
+[resource]
+script = ExtResource("1_wave")
+mob_count = 8
+spawn_interval = 1.5
+max_alive = 0
+pause_after = 4.0
