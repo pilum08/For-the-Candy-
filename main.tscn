@@ -3,9 +3,13 @@
 [ext_resource type="PackedScene" path="res://Player.tscn" id="1_efxa6"]
 [ext_resource type="Script" uid="uid://bvihbd470mlxn" path="res://CameraFollow.gd" id="2_camfk"]
 [ext_resource type="PackedScene" path="res://Enemy.tscn" id="3_enemy"]
+[ext_resource type="PackedScene" path="res://Pit.tscn" id="4_pit"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ryguw"]
-size = Vector2(4000, 120)
+size = Vector2(530, 120)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_groundR"]
+size = Vector2(2790, 120)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_d13ii"]
 size = Vector2(520, 60)
@@ -24,14 +28,30 @@ collision_layer = 4
 collision_mask = 0
 
 [node name="Shape" type="CollisionShape2D" parent="Ground" unique_id=1636462475]
+position = Vector2(-1735, 0)
 shape = SubResource("RectangleShape2D_ryguw")
 
 [node name="Visual" type="ColorRect" parent="Ground" unique_id=647200290]
 offset_left = -2000.0
 offset_top = -60.0
+offset_right = -1470.0
+offset_bottom = 60.0
+color = Color(0.82, 0.82, 0.86, 1)
+
+[node name="VisualRight" type="ColorRect" parent="Ground" unique_id=2061305559]
+offset_left = -790.0
+offset_top = -60.0
 offset_right = 2000.0
 offset_bottom = 60.0
 color = Color(0.82, 0.82, 0.86, 1)
+
+[node name="ShapeRight" type="CollisionShape2D" parent="Ground" unique_id=86759478]
+position = Vector2(605, 0)
+shape = SubResource("RectangleShape2D_groundR")
+
+[node name="Pit" parent="." unique_id=513324870 instance=ExtResource("4_pit")]
+position = Vector2(-1130, 0)
+required_corpses = 3
 
 [node name="PlatformA" type="StaticBody2D" parent="." unique_id=958948705]
 visible = false
@@ -84,6 +104,7 @@ color = Color(0.75, 0.78, 0.86, 1)
 [node name="Player" parent="." unique_id=1694100496 instance=ExtResource("1_efxa6")]
 position = Vector2(0, -140)
 idle_pose_fps = 2.0
+death_hold_time = 0.2
 
 [node name="Camera" type="Camera2D" parent="Player" unique_id=1797260378]
 position = Vector2(0, -140)

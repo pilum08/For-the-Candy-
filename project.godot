@@ -67,6 +67,8 @@ interact={
 2d_physics/layer_3="земля и стены"
 2d_physics/layer_4="снаряды"
 2d_physics/layer_5="тела"
+2d_physics/layer_6="замороженные тела"
+2d_physics/layer_7="обломки"
 
 [physics]
 

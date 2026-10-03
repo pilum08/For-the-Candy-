@@ -10,6 +10,7 @@
 [ext_resource type="Texture2D" path="res://Sprites/DON-r-arm.png" id="8_rv870"]
 [ext_resource type="Texture2D" path="res://Sprites/DON_head.png" id="9_efikj"]
 [ext_resource type="Texture2D" path="res://Sprites/DON_idle_face.png" id="10_itxgx"]
+[ext_resource type="Script" path="res://DeathBurst.gd" id="11_burst"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_cgsek"]
 size = Vector2(94.92, 73.079997)
@@ -18,7 +19,7 @@ size = Vector2(94.92, 73.079997)
 radius = 189.0
 
 [node name="Player" type="CharacterBody2D" groups=["player"] unique_id=1694100496]
-collision_mask = 4
+collision_mask = 36
 floor_snap_length = 4.0
 script = ExtResource("1_hp6x6")
 projectile_scene = ExtResource("2_3tkgg")
@@ -113,3 +114,6 @@ texture_filter = 1
 texture = ExtResource("10_itxgx")
 centered = false
 offset = Vector2(-60, -345)
+
+[node name="Burst" type="Node2D" parent="."]
+script = ExtResource("11_burst")

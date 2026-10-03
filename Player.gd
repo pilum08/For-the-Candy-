@@ -17,6 +17,7 @@ extends CharacterBody2D
 # ============================================================================
 const Rig := preload("res://Rig.gd")   # механизм сборки: расставляет части по таблице RIG
 const CorpseScript := preload("res://Corpse.gd")   # тип трупа: pickup/put_down/launch проверяет парсер
+const DeathBurst := preload("res://DeathBurst.gd")   # разлёт частей на обломки (см. die)
 const RIG: Dictionary = {
 	"LegL": {
 		"node": "Visual/LegL", "sprite": "Visual/LegL/Sprite",
@@ -63,6 +64,9 @@ const COLLIDER_OFFSET := Vector2(0.0, -174.0)
 # --- лица (оверлеи поверх головы) -------------------------------------------
 const FACE_IDLE: Texture2D = preload("res://Sprites/DON_idle_face.png")
 const FACE_SHOOT: Texture2D = preload("res://Sprites/DON_shoot_face-2.png")
+## Лицо смерти: оверлей ТОГО ЖЕ размера (290x319, как idle и shoot), поэтому смерть меняет
+## у Face только текстуру — смещение и масштаб остаются прежними (см. _swap_face).
+const FACE_DEAD: Texture2D = preload("res://Sprites/DON_dead_face.png")
 
 # ============================================================================
 # ТАБЛИЦЫ ПОЗ
@@ -233,8 +237,12 @@ const AIR_DOWN_POSE: Dictionary = {
 @export var throw_full_distance: float = 500.0
 
 @export_group("Смерть")
-## Сколько секунд герой лежит мёртвым до перезагрузки сцены. Сюда подключится сцена смерти.
-@export var respawn_delay: float = 1.0
+## Сколько секунд герой стоит с мёртвым лицом (замер), прежде чем части разлетятся.
+@export var death_hold_time: float = 0.5
+## Полное время смерти: через столько секунд ОТ НАЧАЛА die() сцена перезагружается.
+@export var death_total_time: float = 2.0
+## Добавка к death_total_time — пауза ПОСЛЕ разлёта. 0 — перезагрузка ровно в death_total_time.
+@export var respawn_delay: float = 0.0
 
 ## Герой умер (аргумент — сам герой). Сигнал на будущую сцену смерти.
 signal died(player: Node)
@@ -256,6 +264,10 @@ signal died(player: Node)
 @onready var carry_point: Marker2D = $Visual/Body/CarryPoint
 @onready var pickup_zone: Area2D = $PickupZone
 @onready var pickup_shape: CollisionShape2D = $PickupZone/Shape
+## Спрайт торса: в смерти уходит в отдельный обломок (Skirt/ArmFront/Head — его братья по Body).
+@onready var torso: Sprite2D = $Visual/Body/Torso
+## Разлёт частей тела на обломки (DeathBurst.gd + Debris.tscn), см. die.
+@onready var burst: DeathBurst = $Burst
 
 # ============================================================================
 # СОСТОЯНИЕ
@@ -647,12 +659,27 @@ func _apply_pose(p: Dictionary) -> void:
 # ============================================================================
 # СМЕРТЬ — ЕДИНСТВЕННАЯ ТОЧКА (шипы, враг касанием и всё будущее зовут только die())
 # ============================================================================
-## Герой умер. Своей логики смерти здесь нет: ни анимации, ни экрана — только
-## «замер и перезапуск». Сюда подключится сцена смерти (сигнал died / настройка respawn_delay).
+## Части героя, которые в смерти разлетаются обломками (см. die). Torso — сам спрайт торса:
+## Skirt, ArmFront и Head — его братья по узлу Visual/Body, а не дети.
+const DEATH_PARTS: Array[String] = [
+	"Visual/LegL",
+	"Visual/LegR",
+	"Visual/ArmBack",
+	"Visual/Body/Torso",
+	"Visual/Body/Skirt",
+	"Visual/Body/ArmFront",
+	"Visual/Body/Head",
+]
+
+
+## Герой умер: замер с мёртвым лицом, разлёт частей обломками, перезапуск сцены.
+## Экран смерти, счётчики и звук сюда НЕ входят — под них есть сигнал died.
+## Время всей последовательности — в экспортах группы «Смерть», сам разлёт — в DeathBurst.gd.
 func die() -> void:
 	if is_dead:
 		return            # защита от двойного вызова: шипы + враг в одном кадре и т. п.
 	is_dead = true
+	# --- 1. Мгновенно: герой больше не действует, и его больше никто не видит -----------
 	velocity = Vector2.ZERO
 	# Руки разжимаются насовсем: _drop_corpse() уже вернул и труп, и кисти; вызов ниже — на случай
 	# смерти с пустыми руками (без снимка он молчит) и он же явно показывает скрытую переднюю руку:
@@ -661,13 +688,54 @@ func die() -> void:
 		_drop_corpse()
 	restore_z()
 	_apply_art_scale()
-	set_physics_process(false)   # движение выключено
+	set_physics_process(false)   # движение, стрельба (ЛКМ) и бросок трупа (E) выключены
 	set_process(false)           # ввод/прицел/анимация выключены
+	# Враги ищут цель по группе player (Enemy.target_group): без группы они останавливаются,
+	# а снятый слой коллизии закрывает их HitBox — стоящий герой для них больше не «касание».
+	remove_from_group(&"player")
+	# Слои трогаем отложенно: die() зовут и из сигнала шипов, а менять состояние тела прямо
+	# внутри разбора физики нельзя. К следующему кадру герой уже невидим для всех.
+	set_deferred("collision_layer", 0)              # никто героя не замечает (враги, снаряды, трупы)
+	pickup_zone.set_deferred("monitoring", false)   # зона подбора трупов выключена
 	died.emit(self)
-	await get_tree().create_timer(respawn_delay).timeout
+	# --- 2. Мёртвое лицо и замер: части стоят на месте, меняется только лицо ------------
+	_swap_face(FACE_DEAD)
+	await get_tree().create_timer(death_hold_time).timeout
+	# --- 3. Разлёт: каждая часть уходит в свой обломок, оригиналы скрываются ------------
+	var parts: Array[Node2D] = []
+	for path in DEATH_PARTS:
+		var part := get_node_or_null(path) as Node2D
+		if part != null:
+			parts.append(part)
+	burst.spawn_debris(parts)
+	# --- 4. Обломки падают и лежат до перезапуска: таймера удаления нет ----------------
+	# --- 5. Перезапуск сцены (бывшая заглушка respawn_delay — теперь в общем времени смерти)
+	await get_tree().create_timer(maxf(death_total_time - death_hold_time, 0.0) + respawn_delay).timeout
 	# Сцена перезагружается сама; при F6 (герой без сцены) молча выходим.
 	if get_tree().current_scene != null:
 		get_tree().reload_current_scene()
+
+
+## Смена лица рывком, без плавности. Все лица Дона — картинки одного размера (290x319: idle,
+## shoot, dead), поэтому штатный случай простой: подменяем ТОЛЬКО текстуру, а смещение
+## (-60, -345, то есть -pivot из RIG) и масштаб остаются как были — лицо встаёт точно на
+## прежнее место. Страховка ниже — на случай картинки другого размера: масштаб считаем по
+## прежнему прямоугольнику, а смещение подбираем так, чтобы новый лёг по центру старого,
+## а не «на глаз».
+func _swap_face(tex: Texture2D) -> void:
+	if tex == null:
+		return
+	var old_size := Vector2.ZERO
+	if face.texture != null:
+		old_size = face.texture.get_size()
+	var new_size := tex.get_size()
+	var base_offset := face.offset   # = -pivot из таблицы RIG (ставит Rig.apply)
+	face.texture = tex
+	if old_size == Vector2.ZERO or new_size == Vector2.ZERO or old_size == new_size:
+		return
+	var k := maxf(old_size.x / new_size.x, old_size.y / new_size.y)   # новый закроет прежний
+	face.scale = Vector2.ONE * k
+	face.offset = (base_offset + old_size * 0.5) / k - new_size * 0.5
 
 
 # ============================================================================
