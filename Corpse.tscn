@@ -14,6 +14,7 @@ mass = 1.0
 linear_damp = 1.0
 angular_damp = 4.0
 script = ExtResource("1_corpse")
+corpse_world_z = -1
 
 [node name="Collider" type="CollisionShape2D" parent="."]
 position = Vector2(4.83, -39.9)
