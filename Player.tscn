@@ -14,7 +14,10 @@
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_cgsek"]
 size = Vector2(94.92, 73.079997)
 
-[node name="Player" type="CharacterBody2D" unique_id=1694100496]
+[sub_resource type="CircleShape2D" id="CircleShape2D_pickup"]
+radius = 189.0
+
+[node name="Player" type="CharacterBody2D" groups=["player"] unique_id=1694100496]
 collision_mask = 4
 floor_snap_length = 4.0
 script = ExtResource("1_hp6x6")
@@ -23,6 +26,14 @@ projectile_scene = ExtResource("2_3tkgg")
 [node name="Collider" type="CollisionShape2D" parent="." unique_id=568760621]
 position = Vector2(0, -36.54)
 shape = SubResource("RectangleShape2D_cgsek")
+
+[node name="PickupZone" type="Area2D" parent="."]
+collision_layer = 0
+collision_mask = 16
+monitorable = false
+
+[node name="Shape" type="CollisionShape2D" parent="PickupZone"]
+shape = SubResource("CircleShape2D_pickup")
 
 [node name="Visual" type="Node2D" parent="." unique_id=1297314191]
 texture_filter = 1
@@ -34,7 +45,8 @@ position = Vector2(-139, -120)
 [node name="Sprite" type="Sprite2D" parent="Visual/LegL" unique_id=671621761]
 texture_filter = 1
 texture = ExtResource("3_l6ohk")
-offset = Vector2(12.5, 58.4)
+centered = false
+offset = Vector2(-21, -4.1)
 
 [node name="LegR" type="Node2D" parent="Visual" unique_id=1397097342]
 position = Vector2(111, -109)
@@ -42,7 +54,8 @@ position = Vector2(111, -109)
 [node name="Sprite" type="Sprite2D" parent="Visual/LegR" unique_id=1492850040]
 texture_filter = 1
 texture = ExtResource("4_oudfo")
-offset = Vector2(19.6, 52.6)
+centered = false
+offset = Vector2(-11.4, -2.4)
 
 [node name="ArmBack" type="Node2D" parent="Visual" unique_id=1571787504]
 position = Vector2(-201, -254)
@@ -50,7 +63,8 @@ position = Vector2(-201, -254)
 [node name="Sprite" type="Sprite2D" parent="Visual/ArmBack" unique_id=1639280329]
 texture_filter = 1
 texture = ExtResource("5_d6rpx")
-offset = Vector2(-66.399994, -26.900002)
+centered = false
+offset = Vector2(-150.4, -77.4)
 
 [node name="Body" type="Node2D" parent="Visual" unique_id=1350109269]
 position = Vector2(-2, -162)
@@ -58,7 +72,8 @@ position = Vector2(-2, -162)
 [node name="Torso" type="Sprite2D" parent="Visual/Body" unique_id=1998921393]
 texture_filter = 1
 texture = ExtResource("6_r3kul")
-offset = Vector2(4, -96.5)
+centered = false
+offset = Vector2(-223, -195)
 
 [node name="Skirt" type="Node2D" parent="Visual/Body" unique_id=797640818]
 position = Vector2(-1, -86)
@@ -66,7 +81,11 @@ position = Vector2(-1, -86)
 [node name="Sprite" type="Sprite2D" parent="Visual/Body/Skirt" unique_id=364803370]
 texture_filter = 1
 texture = ExtResource("7_jatw7")
-offset = Vector2(-1.5, 81)
+centered = false
+offset = Vector2(-268, 0)
+
+[node name="CarryPoint" type="Marker2D" parent="Visual/Body"]
+position = Vector2(200, 100)
 
 [node name="ArmFront" type="Node2D" parent="Visual/Body" unique_id=723944344]
 position = Vector2(201, -82)
@@ -74,7 +93,8 @@ position = Vector2(201, -82)
 [node name="Sprite" type="Sprite2D" parent="Visual/Body/ArmFront" unique_id=646404932]
 texture_filter = 1
 texture = ExtResource("8_rv870")
-offset = Vector2(72.4, -26.5)
+centered = false
+offset = Vector2(-6.6, -60)
 
 [node name="Muzzle" type="Marker2D" parent="Visual/Body/ArmFront" unique_id=1224950822]
 position = Vector2(133, -38)
@@ -85,9 +105,11 @@ position = Vector2(-15, -139)
 [node name="Sprite" type="Sprite2D" parent="Visual/Body/Head" unique_id=1910081817]
 texture_filter = 1
 texture = ExtResource("9_efikj")
-offset = Vector2(2.5, -226)
+centered = false
+offset = Vector2(-253.5, -443)
 
 [node name="Face" type="Sprite2D" parent="Visual/Body/Head" unique_id=244000169]
 texture_filter = 1
 texture = ExtResource("10_itxgx")
-offset = Vector2(85, -185.5)
+centered = false
+offset = Vector2(-60, -345)

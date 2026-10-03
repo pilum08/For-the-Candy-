@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://uljgc0lm3i3q"
-path="res://.godot/imported/hero_dead.bmp-e63b63bc259279f6967061134e93e6cd.ctex"
+uid="uid://c3odd7efxejed"
+path="res://.godot/imported/Enemy_l_leg.png-5da5fceec1a4e86d1620e3cc40e3b5ec.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Sprites/hero_dead.bmp"
-dest_files=["res://.godot/imported/hero_dead.bmp-e63b63bc259279f6967061134e93e6cd.ctex"]
+source_file="res://Sprites/enemy/Enemy_l_leg.png"
+dest_files=["res://.godot/imported/Enemy_l_leg.png-5da5fceec1a4e86d1620e3cc40e3b5ec.ctex"]
 
 [params]
 

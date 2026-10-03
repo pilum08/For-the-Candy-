@@ -6,21 +6,58 @@ extends CharacterBody2D
 ## Углы в градусах, смещения в пикселях АРТА (умножаются на art_scale).
 ## Микро-джиттер (±1-2 px, ±2°) вшит прямо в числа таблиц — никакого Random в рантайме.
 
-# --- геометрия сборки: измерена по референсу Sprites/DON.png -----------------
+# ============================================================================
+# СБОРКА ТЕЛА — единственное место с геометрией частей (механику см. Rig.gd).
 # Начало координат игрока = центр между стопами на земле.
-const BODY_POS := Vector2(-2.0, -162.0)         # торс, пивот — талия (низ торса)
-const HEAD_POS := Vector2(-17.0, -301.0)        # голова, пивот — шея (МИРОВЫЕ координаты)
-const SKIRT_POS := Vector2(-3.0, -248.0)        # юбка, пивот — верх юбки (МИРОВЫЕ координаты)
-# Head и Skirt — ДОЧЕРНИЕ узлы Body, поэтому им нужны ЛОКАЛЬНЫЕ координаты:
-# иначе BODY_POS прибавляется дважды и голова с юбкой уезжают вверх на 162 px.
-const HEAD_LOCAL := HEAD_POS - BODY_POS         # = (-15, -139): ровно как в Player.tscn
-const SKIRT_LOCAL := SKIRT_POS - BODY_POS       # = (-1, -86):   ровно как в Player.tscn
-const SHOULDER_BACK := Vector2(-201.0, -254.0)  # задняя (левая) рука
-const SHOULDER_FRONT := Vector2(199.0, -244.0)  # передняя рука — ей целимся
-const HIP_L := Vector2(-139.0, -120.0)          # дальняя нога
-const HIP_R := Vector2(111.0, -109.0)           # ближняя нога
-const MUZZLE_REL := Vector2(133.0, -38.0)       # центр кисти-шарика от плеча
-const COLLIDER_SIZE := Vector2(452.0, 348.0)    # прямоугольник: торс + юбка + ноги
+#   pivot_px   — сустав ВНУТРИ картинки, в её пикселях от левого верхнего угла
+#                (например центр розового конца руки) → Sprite2D.offset = -pivot_px;
+#   attach_pos — куда сустав встаёт НА РОДИТЕЛЕ (пиксели арта, до art_scale).
+# Заменил PNG на обрезанный — правишь только pivot_px, размер картинки не нужен.
+# Порядок частей = порядок отрисовки (он же порядок узлов в Player.tscn).
+# ============================================================================
+const Rig := preload("res://Rig.gd")   # механизм сборки: расставляет части по таблице RIG
+const CorpseScript := preload("res://Corpse.gd")   # тип трупа: pickup/put_down/launch проверяет парсер
+const RIG: Dictionary = {
+	"LegL": {
+		"node": "Visual/LegL", "sprite": "Visual/LegL/Sprite",
+		"attach_pos": Vector2(-139.0, -120.0), "pivot_px": Vector2(21.0, 4.1),
+	},
+	"LegR": {
+		"node": "Visual/LegR", "sprite": "Visual/LegR/Sprite",
+		"attach_pos": Vector2(111.0, -109.0), "pivot_px": Vector2(11.4, 2.4),
+	},
+	"ArmBack": {
+		"node": "Visual/ArmBack", "sprite": "Visual/ArmBack/Sprite",
+		"attach_pos": Vector2(-201.0, -254.0), "pivot_px": Vector2(150.4, 77.4),
+	},
+	"Body": {
+		"node": "Visual/Body", "sprite": "Visual/Body/Torso",
+		"attach_pos": Vector2(-2.0, -162.0), "pivot_px": Vector2(223.0, 195.0),
+	},
+	"Skirt": {
+		"node": "Visual/Body/Skirt", "sprite": "Visual/Body/Skirt/Sprite",
+		"attach_pos": Vector2(-1.0, -86.0), "pivot_px": Vector2(268.0, 0.0),
+	},
+	"ArmFront": {
+		"node": "Visual/Body/ArmFront", "sprite": "Visual/Body/ArmFront/Sprite",
+		"attach_pos": Vector2(201.0, -82.0), "pivot_px": Vector2(6.6, 60.0),
+	},
+	"Head": {
+		"node": "Visual/Body/Head", "sprite": "Visual/Body/Head/Sprite",
+		"attach_pos": Vector2(-15.0, -139.0), "pivot_px": Vector2(253.5, 443.0),
+	},
+	"Face": {
+		"node": "Visual/Body/Head/Face",
+		"attach_pos": Vector2(0.0, 0.0), "pivot_px": Vector2(60.0, 345.0),
+	},
+	"Muzzle": {
+		"node": "Visual/Body/ArmFront/Muzzle", "sprite": "",
+		"attach_pos": Vector2(133.0, -38.0), "pivot_px": Vector2.ZERO,
+	},
+}
+
+# Коллайдер (прямоугольник: торс + юбка + ноги) — тоже в пикселях арта.
+const COLLIDER_SIZE := Vector2(452.0, 348.0)
 const COLLIDER_OFFSET := Vector2(0.0, -174.0)
 
 # --- лица (оверлеи поверх головы) -------------------------------------------
@@ -167,6 +204,41 @@ const AIR_DOWN_POSE: Dictionary = {
 ## Сколько держать «лицо выстрела».
 @export var shoot_face_time: float = 0.18
 
+@export_group("Труп: подбор и бросок")
+## Радиус зоны подбора PickupZone — в пикселях арта (как коллайдер, умножается на
+## art_scale * player_scale). Внутри неё E берёт ближайший труп из группы "corpses".
+@export var pickup_radius: float = 900.0
+## Доп. сдвиг гнезда трупа от позиции из Player.tscn (пиксели торса): x — вперёд
+## по взгляду, y — вниз. Базовое место смотри в сцене (Visual/Body/CarryPoint).
+@export var carry_offset_x: float = 0.0
+@export var carry_offset_y: float = 0.0
+## Размер трупа в руках относительно его обычного размера (1 = как лежал на земле).
+@export_range(0.05, 2.0, 0.01) var carried_scale_mult: float = 1.0
+## Поза «держу»: углы рук в градусах (0 = вперёд по взгляду). Пока труп в руках, передняя
+## рука не целится за курсором, задняя не дёргается с ходьбой. Дефолт подобран так, чтобы
+## кисти оказались у боков трупа при дефолтных carry_offset_*.
+@export var carry_arm_angle_front: float = 69.0
+@export var carry_arm_angle_back: float = 176.0
+## Множители скорости ходьбы и силы прыжка, пока труп в руках.
+@export_range(0.05, 1.0, 0.05) var carry_speed_mult: float = 0.7
+@export_range(0.05, 1.0, 0.05) var carry_jump_mult: float = 0.75
+## Куда встаёт труп, когда его опускают (E второй раз): вперёд от стоп, пиксели арта.
+@export var drop_forward: float = 900.0
+## Лёгкий толчок вперёд в момент, когда труп опустили (px/с).
+@export var drop_impulse: float = 120.0
+## Скорость броска у самого героя и на предельной дистанции (px/с).
+@export var throw_speed_min: float = 450.0
+@export var throw_speed_max: float = 1200.0
+## Дистанция до курсора, на которой бросок набирает throw_speed_max (px).
+@export var throw_full_distance: float = 500.0
+
+@export_group("Смерть")
+## Сколько секунд герой лежит мёртвым до перезагрузки сцены. Сюда подключится сцена смерти.
+@export var respawn_delay: float = 1.0
+
+## Герой умер (аргумент — сам герой). Сигнал на будущую сцену смерти.
+signal died(player: Node)
+
 # ============================================================================
 # УЗЛЫ
 # ============================================================================
@@ -181,6 +253,9 @@ const AIR_DOWN_POSE: Dictionary = {
 @onready var arm_back: Node2D = $Visual/ArmBack
 @onready var leg_l: Node2D = $Visual/LegL
 @onready var leg_r: Node2D = $Visual/LegR
+@onready var carry_point: Marker2D = $Visual/Body/CarryPoint
+@onready var pickup_zone: Area2D = $PickupZone
+@onready var pickup_shape: CollisionShape2D = $PickupZone/Shape
 
 # ============================================================================
 # СОСТОЯНИЕ
@@ -197,10 +272,28 @@ var _recoil_timer: float = 0.0
 var _face_timer: float = 0.0
 var _arm_rest_angle: float = 0.0
 var _applied_art_scale: float = -1.0
+## Позиция гнезда трупа прямо из Player.tscn: экспорты carry_offset_* сдвигают её.
+var _carry_base := Vector2.ZERO
+## Руки заняты трупом: публичный флаг «несу». Ставится и сбрасывается сам — сеттером
+## _carried ниже, поэтому отдельно его править не надо (его читает can_shoot).
+var is_carrying: bool = false
+## Труп в руках (null — руки пусты). Нести можно ровно один, см. _interact.
+## Сеттер держит is_carrying в согласии с руками: где бы _carried ни меняли, флаг верен.
+var _carried: CorpseScript = null:
+	set(value):
+		_carried = value
+		is_carrying = value != null
+## ЛКМ уже потрачена броском: пока кнопку не отпустят, выстрела не будет. Иначе то самое
+## нажатие, которым бросили труп, следующим кадром создаёт снаряд (ЛКМ-то ещё зажата).
+var _shoot_consumed: bool = false
+## Умер ли герой. Смерть — только через die(), повторный вызов ничего не делает.
+var is_dead: bool = false
 
 
 func _ready() -> void:
-	_arm_rest_angle = MUZZLE_REL.angle()  # «покой» руки: шарик дальше и выше плеча
+	Rig.apply(self, RIG)   # расставляет суставы и спрайты по таблице RIG (см. выше)
+	_arm_rest_angle = _attach("Muzzle").angle()  # «покой» руки: шарик дальше и выше плеча
+	_carry_base = carry_point.position            # база для carry_offset_* (см. _apply_art_scale)
 	visual.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_apply_art_scale()
 	face.texture = FACE_IDLE
@@ -231,14 +324,16 @@ func _move(delta: float) -> void:
 	if not is_on_floor():
 		velocity.y = minf(velocity.y + gravity * k * delta, max_fall_speed * k)
 
+	# С трупом в руках герой идёт медленнее и прыгает слабее (см. carry_* в экспортах).
+	var carry_mult := carry_speed_mult if _carried != null else 1.0
 	var dir := Input.get_axis("move_left", "move_right")
 	if absf(dir) > 0.01:
-		velocity.x = move_toward(velocity.x, dir * speed * k, acceleration * k * delta)
+		velocity.x = move_toward(velocity.x, dir * speed * k * carry_mult, acceleration * k * delta)
 	else:
 		velocity.x = move_toward(velocity.x, 0.0, friction * k * delta)
 
 	if Input.is_action_just_pressed("jump") and is_on_floor():
-		velocity.y = jump_velocity * k
+		velocity.y = jump_velocity * k * (carry_jump_mult if _carried != null else 1.0)
 	if Input.is_action_just_released("jump") and velocity.y < 0.0:
 		velocity.y *= jump_cut
 
@@ -269,6 +364,12 @@ func _update_aim() -> void:
 		_facing = 1 if to_mouse.x > 0.0 else -1
 		_apply_art_scale()  # зеркалим визуал через scale.x
 
+	if _carried != null:
+		# Труп в руках: передняя рука замирает в позе «держу» и не целится за курсором,
+		# отдачи тоже нет (прицел не считается вовсе).
+		arm_front.rotation = deg_to_rad(carry_arm_angle_front)
+		return
+
 	var shoulder := arm_front.global_position
 	var aim_vec := get_global_mouse_position() - shoulder
 	# Переводим направление в локальные оси визуала (учёт зеркала по scale.x).
@@ -291,12 +392,34 @@ func _recoil_angle() -> float:
 func _tick_combat(delta: float) -> void:
 	_shoot_timer = maxf(_shoot_timer - delta, 0.0)
 	_recoil_timer = maxf(_recoil_timer - delta, 0.0)
-	if Input.is_action_pressed("shoot"):
+	if Input.is_action_just_released("shoot"):
+		_shoot_consumed = false   # кнопку отпустили — следующее нажатие снова стреляет
+	if Input.is_action_just_pressed("interact"):
+		_interact()
+	if _carried != null:
+		# Труп в руках: ЛКМ бросает, а стрелять в этот момент нельзя (см. can_shoot).
+		if Input.is_action_just_pressed("shoot"):
+			_throw_corpse()
+			# Это нажатие ЛКМ «съедено» броском: палец ещё на кнопке, но снаряда после
+			# броска не будет — только после отпускания и нового нажатия (см. _shoot_consumed).
+			_shoot_consumed = true
+		return
+	if Input.is_action_pressed("shoot") and not _shoot_consumed:
 		_shoot()
 
 
+## Можно ли сейчас выстрелить. Снаряд создаётся ровно в одном месте — _shoot(), и он зовёт
+## это первой строкой. Запреты: руки заняты трупом, герой мёртв, идёт кулдаун между выстрелами.
+func can_shoot() -> bool:
+	if is_carrying or is_dead:
+		return false
+	return _shoot_timer <= 0.0
+
+
 func _shoot() -> void:
-	if _shoot_timer > 0.0 or projectile_scene == null:
+	if not can_shoot():
+		return
+	if projectile_scene == null:
 		return
 	_shoot_timer = shoot_cooldown
 	_recoil_timer = recoil_time          # рывок назад, потом такой же рывок в исходное
@@ -306,11 +429,75 @@ func _shoot() -> void:
 	var dir := get_global_mouse_position() - origin
 	if dir.length_squared() < 1.0:
 		dir = Vector2(float(_facing), 0.0)
+	# ВРЕМЕННО (диагностика «ЛКМ при трупе в руках»): появилось в консоли — снаряд правда
+	# создан. Это и есть точка создания снаряда, строки ниже. Убрать по команде.
+	print("[SHOOT] снаряд создан | is_carrying=%s is_dead=%s _carried=%s" % [is_carrying, is_dead, _carried])
+	print_stack()
 	var shot := projectile_scene.instantiate()
 	shot.art_scale = art_scale
 	get_tree().current_scene.add_child(shot)
 	shot.global_position = origin
 	shot.launch(dir.normalized())
+
+
+# ============================================================================
+# ТРУП: ПОДБОР (E) И БРОСОК (ЛКМ)
+# ============================================================================
+## E: руки пусты — берём ближайший труп из PickupZone; руки заняты — опускаем его.
+func _interact() -> void:
+	if _carried != null and not is_instance_valid(_carried):
+		_carried = null   # труп исчез из мира — руки снова пусты
+	if _carried != null:
+		_drop_corpse()
+		return
+	var corpse := _nearest_corpse()
+	if corpse != null:
+		_carried = corpse
+		corpse.pickup(self, carried_scale_mult)
+
+
+## Ближайший труп из группы "corpses", попавший в PickupZone (её форму см. _apply_art_scale).
+func _nearest_corpse() -> CorpseScript:
+	var best: CorpseScript = null
+	var best_distance := INF
+	for body in pickup_zone.get_overlapping_bodies():
+		var corpse := body as CorpseScript
+		if corpse == null:
+			continue
+		var distance := corpse.global_position.distance_to(pickup_zone.global_position)
+		if distance < best_distance:
+			best_distance = distance
+			best = corpse
+	return best
+
+
+## Опускаем труп на землю перед собой (E второй раз) и слегка толкаем вперёд.
+func _drop_corpse() -> void:
+	var corpse := _carried
+	_carried = null
+	if corpse == null:
+		return
+	var s := maxf(art_scale, 0.01) * maxf(player_scale, 0.01)
+	# Начало координат трупа — его низ, поэтому точка впереди стоп кладёт его на землю.
+	var at := global_position + Vector2(drop_forward * float(_facing) * s, 0.0)
+	corpse.put_down(at, Vector2(drop_impulse * float(_facing), 0.0))
+
+
+## Бросок по дуге в сторону курсора: рука дёргается назад (как отдача), дальше труп летит сам.
+func _throw_corpse() -> void:
+	var corpse := _carried
+	_carried = null
+	if corpse == null:
+		return
+	_recoil_timer = recoil_time   # рывок передней руки, без плавности (см. _recoil_angle)
+	var from := carry_point.global_position
+	var to_mouse := get_global_mouse_position() - from
+	var direction := Vector2(float(_facing), 0.0)
+	if to_mouse.length_squared() >= 1.0:
+		direction = to_mouse.normalized()
+	# Чем дальше курсор, тем сильнее бросок: от throw_speed_min до throw_speed_max.
+	var t := clampf(to_mouse.length() / maxf(throw_full_distance, 1.0), 0.0, 1.0)
+	corpse.launch(direction, lerpf(throw_speed_min, throw_speed_max, t))
 
 
 func _update_face(delta: float) -> void:
@@ -358,27 +545,60 @@ func _pose_for_state() -> Dictionary:
 
 ## Применяет позу: пивоты остаются на местах, меняются повороты и мелкие смещения.
 func _apply_pose(p: Dictionary) -> void:
-	body.position = BODY_POS + (p["body_pos"] as Vector2)
+	body.position = _attach("Body") + (p["body_pos"] as Vector2)
 	body.rotation = deg_to_rad(p["body_rot"] as float)
 
-	# Head и Skirt — дети Body: координаты локальные (см. HEAD_LOCAL / SKIRT_LOCAL).
-	head.position = HEAD_LOCAL + (p["head_pos"] as Vector2)
+	# Head и Skirt — дети Body: координаты локальные (attach_pos части в таблице RIG).
+	head.position = _attach("Head") + (p["head_pos"] as Vector2)
 	head.rotation = deg_to_rad(p["head_rot"] as float)
 
-	skirt.position = SKIRT_LOCAL + (p["skirt_pos"] as Vector2)
+	skirt.position = _attach("Skirt") + (p["skirt_pos"] as Vector2)
 	skirt.rotation = deg_to_rad(p["skirt_rot"] as float)
 
-	leg_l.position = HIP_L + (p["leg_l_pos"] as Vector2)
+	leg_l.position = _attach("LegL") + (p["leg_l_pos"] as Vector2)
 	leg_l.rotation = deg_to_rad(p["leg_l_rot"] as float)
-	leg_r.position = HIP_R + (p["leg_r_pos"] as Vector2)
+	leg_r.position = _attach("LegR") + (p["leg_r_pos"] as Vector2)
 	leg_r.rotation = deg_to_rad(p["leg_r_rot"] as float)
 
-	arm_back.rotation = deg_to_rad(p["arm_back_rot"] as float)
+	# В руках труп: задняя рука тоже замирает в позе «держу», без дёргания с ходьбой.
+	if _carried != null:
+		arm_back.rotation = deg_to_rad(carry_arm_angle_back)
+	else:
+		arm_back.rotation = deg_to_rad(p["arm_back_rot"] as float)
+
+
+# ============================================================================
+# СМЕРТЬ — ЕДИНСТВЕННАЯ ТОЧКА (шипы, враг касанием и всё будущее зовут только die())
+# ============================================================================
+## Герой умер. Своей логики смерти здесь нет: ни анимации, ни экрана — только
+## «замер и перезапуск». Сюда подключится сцена смерти (сигнал died / настройка respawn_delay).
+func die() -> void:
+	if is_dead:
+		return            # защита от двойного вызова: шипы + враг в одном кадре и т. п.
+	is_dead = true
+	velocity = Vector2.ZERO
+	# Руки разжимаются насовсем: труп опускается рядом, а скрытая передняя рука возвращается
+	# (иначе с выключенным _process она так и осталась бы спрятанной — см. _apply_art_scale).
+	if _carried != null:
+		_drop_corpse()
+	_apply_art_scale()
+	set_physics_process(false)   # движение выключено
+	set_process(false)           # ввод/прицел/анимация выключены
+	died.emit(self)
+	await get_tree().create_timer(respawn_delay).timeout
+	# Сцена перезагружается сама; при F6 (герой без сцены) молча выходим.
+	if get_tree().current_scene != null:
+		get_tree().reload_current_scene()
 
 
 # ============================================================================
 # СЛУЖЕБНОЕ
 # ============================================================================
+## attach_pos части из таблицы RIG — «покой» сустава в координатах родителя.
+func _attach(part_name: String) -> Vector2:
+	return Rig.attach(RIG, part_name)
+
+
 ## Коэффициент пересчёта движения под размер героя. player_scale = 0.6 → скорость,
 ## ускорение, трение, прыжок и гравитация умножаются на 0.6: высота прыжка (~185 px)
 ## и время прыжка остаются теми же «в ростах героя». Галочка снята — числа мировые.
@@ -395,6 +615,18 @@ func _motion_scale() -> float:
 func _apply_art_scale() -> void:
 	var s := maxf(art_scale, 0.01) * maxf(player_scale, 0.01)
 	visual.scale = Vector2(s * float(_facing), s)
+	# Гнездо трупа лежит ВНУТРИ Visual/Body: зеркало и масштаб оно получает от родителя,
+	# поэтому тут только позиция (база из сцены плюс подстройка экспортами).
+	carry_point.position = _carry_base + Vector2(carry_offset_x, carry_offset_y)
+	# Труп в руках: передняя рука (та, что на стороне взгляда) рисует кисть поверх трупа —
+	# прячем её целиком, остаётся только задняя рука, замершая в позе «держу». z_index
+	# поднимаем, чтобы кисть задней руки была видна поверх трупа. Без трупа передняя рука
+	# снова показывается, а обе руки возвращаются в обычный порядок отрисовки сцены.
+	var carrying := _carried != null
+	arm_front.visible = not carrying
+	var arms_z := 1 if carrying else 0
+	arm_front.z_index = arms_z
+	arm_back.z_index = arms_z
 	if is_equal_approx(_applied_art_scale, s):
 		return
 	_applied_art_scale = s
@@ -402,3 +634,7 @@ func _apply_art_scale() -> void:
 	rect.size = COLLIDER_SIZE * s
 	collider.shape = rect
 	collider.position = COLLIDER_OFFSET * s
+	# Зона подбора трупов масштабируется так же, как коллайдер (физика не масштабируется).
+	var circle := CircleShape2D.new()
+	circle.radius = maxf(pickup_radius * s, 1.0)
+	pickup_shape.shape = circle

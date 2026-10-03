@@ -1,0 +1,103 @@
+[gd_scene load_steps=13 format=3]
+
+[ext_resource type="Script" path="res://Enemy.gd" id="1_enemy"]
+[ext_resource type="PackedScene" path="res://Corpse.tscn" id="10_corpse"]
+[ext_resource type="Texture2D" path="res://Sprites/enemy/Enemy_body.png" id="2_body"]
+[ext_resource type="Texture2D" path="res://Sprites/enemy/Enemy_pants.png" id="3_pants"]
+[ext_resource type="Texture2D" path="res://Sprites/enemy/Enemy_l_arm.png" id="4_al"]
+[ext_resource type="Texture2D" path="res://Sprites/enemy/Enemy_r_arm.png" id="5_ar"]
+[ext_resource type="Texture2D" path="res://Sprites/enemy/Enemy_l_leg.png" id="6_ll"]
+[ext_resource type="Texture2D" path="res://Sprites/enemy/Enemy_r_leg.png" id="7_lr"]
+[ext_resource type="Texture2D" path="res://Sprites/enemy/Enemy_head.png" id="8_head"]
+[ext_resource type="Texture2D" path="res://Sprites/enemy/Enemy_idle_face.png" id="9_face"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_body"]
+size = Vector2(113.61, 152.46)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_hit"]
+size = Vector2(98.7, 130.2)
+
+[node name="Enemy" type="CharacterBody2D" groups=["enemies"]]
+collision_layer = 2
+collision_mask = 4
+floor_snap_length = 4.0
+script = ExtResource("1_enemy")
+corpse_scene = ExtResource("10_corpse")
+
+[node name="Collider" type="CollisionShape2D" parent="."]
+position = Vector2(-1.05, -76.23)
+shape = SubResource("RectangleShape2D_body")
+
+[node name="HitBox" type="Area2D" parent="."]
+collision_layer = 32
+collision_mask = 1
+monitorable = false
+
+[node name="Shape" type="CollisionShape2D" parent="HitBox"]
+position = Vector2(-1.05, -65.1)
+shape = SubResource("RectangleShape2D_hit")
+
+[node name="Visual" type="Node2D" parent="."]
+texture_filter = 1
+scale = Vector2(0.21, 0.21)
+
+[node name="Body" type="Node2D" parent="Visual"]
+texture_filter = 1
+position = Vector2(1, -139)
+
+[node name="ArmL" type="Sprite2D" parent="Visual/Body"]
+texture_filter = 1
+position = Vector2(-137.3, -106.8)
+texture = ExtResource("4_al")
+centered = false
+offset = Vector2(-105.7, -59.2)
+
+[node name="ArmR" type="Sprite2D" parent="Visual/Body"]
+texture_filter = 1
+position = Vector2(143.2, -116.3)
+texture = ExtResource("5_ar")
+centered = false
+offset = Vector2(-7.2, -60.7)
+
+[node name="LegL" type="Sprite2D" parent="Visual/Body"]
+texture_filter = 1
+position = Vector2(-99.6, 56.3)
+texture = ExtResource("6_ll")
+centered = false
+offset = Vector2(-20.4, -5.3)
+
+[node name="LegR" type="Sprite2D" parent="Visual/Body"]
+texture_filter = 1
+position = Vector2(112, 69.3)
+texture = ExtResource("7_lr")
+centered = false
+offset = Vector2(-21, -6.3)
+
+[node name="Pants" type="Sprite2D" parent="Visual/Body"]
+texture_filter = 1
+position = Vector2(-3, -32)
+texture = ExtResource("3_pants")
+centered = false
+offset = Vector2(-207, -35)
+
+[node name="Torso" type="Sprite2D" parent="Visual/Body"]
+texture_filter = 1
+texture = ExtResource("2_body")
+centered = false
+offset = Vector2(-166, -251)
+
+[node name="Head" type="Node2D" parent="Visual/Body"]
+texture_filter = 1
+position = Vector2(62, -231)
+
+[node name="Sprite" type="Sprite2D" parent="Visual/Body/Head"]
+texture_filter = 1
+texture = ExtResource("8_head")
+centered = false
+offset = Vector2(-340, -357)
+
+[node name="Face" type="Sprite2D" parent="Visual/Body/Head"]
+texture_filter = 1
+texture = ExtResource("9_face")
+centered = false
+offset = Vector2(-317, -301)
