@@ -72,6 +72,17 @@ var _saved_mirror: float = 1.0
 ## В руках труп должен выглядеть ровно так же, как на земле, а после броска/опускания — вернуть
 ## этот размер, поэтому он и запоминается, а не берётся из enemy_scale.
 var _saved_global_scale: Vector2 = Vector2.ONE
+## Порядок отрисовки до подбора: z_index, его относительность и «рисоваться за родителем».
+## В руках труп висит в гнезде внутри Visual героя, то есть рисуется деталью его группы, а на
+## земле порядок задаётся этими тремя значениями плюс местом в списке детей родителя — все
+## четыре и возвращаем, чтобы лежащий труп рисовался ровно так же, как до подбора.
+var _saved_z_index: int = 0
+var _saved_z_relative: bool = true
+var _saved_show_behind_parent: bool = false
+## Место трупа в списке детей родителя до подбора. reparent() кладёт узел в КОНЕЦ списка, а в 2D
+## порядок рисования — это и есть порядок списка, поэтому без этого труп после броска/опускания
+## рисовался бы поверх того, поверх чего он не рисовался.
+var _saved_home_index: int = -1
 ## Есть ли что возвращать: true от подбора до restore_physics(). Без подбора возвращать нечего —
 ## иначе труп, которого никто не брал, получил бы чужие (нулевые) слои и маски.
 var _saved_valid: bool = false
@@ -106,6 +117,10 @@ func pickup(carrier: Node, scale_mult: float = 1.0) -> void:
 	_saved_layer = collision_layer
 	_saved_mask = collision_mask
 	_saved_mirror = _mirror
+	_saved_z_index = z_index
+	_saved_z_relative = z_as_relative
+	_saved_show_behind_parent = show_behind_parent
+	_saved_home_index = get_index()
 	# Размер и зеркало запоминаем ДО переноса: гнездо лежит внутри Visual героя, то есть после
 	# переноса труп унаследовал бы player_scale и стал бы меньше, чем лежал на земле.
 	_saved_global_scale = visual.global_scale
@@ -129,6 +144,11 @@ func pickup(carrier: Node, scale_mult: float = 1.0) -> void:
 	rotation = 0.0
 	scale = Vector2.ONE
 	_mirror = 1.0
+	# В руках у трупа свой порядок отрисовки: он — деталь гнезда в группе героя, поэтому z
+	# берём «как у детали», а не как на земле (иначе труп выпрыгнул бы из-за спины героя).
+	z_index = 0
+	z_as_relative = true
+	show_behind_parent = false
 	# Тот же размер, что на земле: модуль запомненного мирового масштаба умножаем на
 	# carried_scale_mult (1 = как лежал) и делим на масштаб гнезда, в котором сидит player_scale.
 	# Знак по X не задаём совсем — его даёт зеркало носильщика, поэтому труп сам разворачивается
@@ -169,6 +189,11 @@ func restore_physics() -> void:
 	_carrier = null
 	if _home_parent != null and is_instance_valid(_home_parent):
 		reparent(_home_parent)
+		# reparent() добавляет узел в конец списка детей, а в 2D порядок рисования — это и есть
+		# порядок списка: возвращаем труп на его прежнее место, чтобы на земле он рисовался
+		# ровно так же, как до подбора.
+		if _saved_home_index >= 0:
+			_home_parent.move_child(self, clampi(_saved_home_index, 0, _home_parent.get_child_count() - 1))
 	_home_parent = null
 	freeze = false
 	collision_layer = _saved_layer
@@ -176,6 +201,10 @@ func restore_physics() -> void:
 	scale = Vector2.ONE
 	rotation = 0.0
 	_mirror = _saved_mirror
+	# Порядок отрисовки — как до подбора (в руках труп рисовался деталью группы героя).
+	z_index = _saved_z_index
+	z_as_relative = _saved_z_relative
+	show_behind_parent = _saved_show_behind_parent
 	_apply_scale()
 	# Коллизия гарантированно рабочая: включена, без чужих масштабов (размер формы — в _apply_scale).
 	collider.disabled = false

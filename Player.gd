@@ -286,6 +286,14 @@ var _carried: CorpseScript = null:
 ## ЛКМ уже потрачена броском: пока кнопку не отпустят, выстрела не будет. Иначе то самое
 ## нажатие, которым бросили труп, следующим кадром создаёт снаряд (ЛКМ-то ещё зажата).
 var _shoot_consumed: bool = false
+## Порядок отрисовки рук на время переноски трупа: снимок «как было до подбора», чтобы
+## вернуть ровно его (см. _raise_arms_over_corpse / _restore_arm_order).
+var _arm_order_saved: bool = false
+var _arm_front_visible: bool = true
+var _arm_front_z: int = 0
+var _arm_front_z_relative: bool = true
+var _arm_back_z: int = 0
+var _arm_back_z_relative: bool = true
 ## Умер ли герой. Смерть — только через die(), повторный вызов ничего не делает.
 var is_dead: bool = false
 
@@ -447,6 +455,7 @@ func _shoot() -> void:
 func _interact() -> void:
 	if _carried != null and not is_instance_valid(_carried):
 		_carried = null   # труп исчез из мира — руки снова пусты
+		_restore_arm_order()   # и порядок рук тоже: вернуть его тут больше негде
 	if _carried != null:
 		_drop_corpse()
 		return
@@ -454,6 +463,7 @@ func _interact() -> void:
 	if corpse != null:
 		_carried = corpse
 		corpse.pickup(self, carried_scale_mult)
+		_raise_arms_over_corpse()
 
 
 ## Ближайший труп из группы "corpses", попавший в PickupZone (её форму см. _apply_art_scale).
@@ -475,6 +485,7 @@ func _nearest_corpse() -> CorpseScript:
 func _drop_corpse() -> void:
 	var corpse := _carried
 	_carried = null
+	_restore_arm_order()   # труп снова на земле — руки возвращаем в порядок до подбора
 	if corpse == null:
 		return
 	var s := maxf(art_scale, 0.01) * maxf(player_scale, 0.01)
@@ -487,6 +498,7 @@ func _drop_corpse() -> void:
 func _throw_corpse() -> void:
 	var corpse := _carried
 	_carried = null
+	_restore_arm_order()   # труп полетел — руки возвращаем в порядок до подбора
 	if corpse == null:
 		return
 	_recoil_timer = recoil_time   # рывок передней руки, без плавности (см. _recoil_angle)
@@ -498,6 +510,49 @@ func _throw_corpse() -> void:
 	# Чем дальше курсор, тем сильнее бросок: от throw_speed_min до throw_speed_max.
 	var t := clampf(to_mouse.length() / maxf(throw_full_distance, 1.0), 0.0, 1.0)
 	corpse.launch(direction, lerpf(throw_speed_min, throw_speed_max, t))
+
+
+# ============================================================================
+# ПОРЯДОК ОТРИСОВКИ РУК ПРИ ПЕРЕНОСКЕ
+# ============================================================================
+## z_index кистей, пока труп в руках: труп в гнезде рисуется над торсом и юбкой, но под
+## руками и головой, поэтому кисти надо поднять — тогда видна кисть задней руки, а
+## передняя рука (та, что со стороны взгляда) прячется целиком.
+const ARMS_OVER_CORPSE_Z := 1
+
+
+## Взяли труп: снимаем порядок рук «как было до подбора» и поднимаем кисти над трупом.
+## Снимок делается ровно один раз — при подборе, а возвращается при опускании/броске:
+## порядок отрисовки нельзя выводить каждый кадр из _carried, иначе он разъезжается с тем,
+## где труп на самом деле, и рука остаётся поверх трупа, лежащего на земле.
+func _raise_arms_over_corpse() -> void:
+	if not _arm_order_saved:
+		_arm_front_visible = arm_front.visible
+		_arm_front_z = arm_front.z_index
+		_arm_front_z_relative = arm_front.z_as_relative
+		_arm_back_z = arm_back.z_index
+		_arm_back_z_relative = arm_back.z_as_relative
+		_arm_order_saved = true
+	arm_front.visible = false
+	# z_as_relative = true: поднятие считается от группы героя, то есть «выше всего, что
+	# рисуется вместе с ним», а не «на 1 выше уровня земли».
+	arm_front.z_index = ARMS_OVER_CORPSE_Z
+	arm_front.z_as_relative = true
+	arm_back.z_index = ARMS_OVER_CORPSE_Z
+	arm_back.z_as_relative = true
+
+
+## Опустили/бросили труп (или он исчез из мира): возвращаем рукам ровно тот порядок и
+## видимость, что были до подбора. Без снимка ничего не делаем — возвращать нечего.
+func _restore_arm_order() -> void:
+	if not _arm_order_saved:
+		return
+	arm_front.visible = _arm_front_visible
+	arm_front.z_index = _arm_front_z
+	arm_front.z_as_relative = _arm_front_z_relative
+	arm_back.z_index = _arm_back_z
+	arm_back.z_as_relative = _arm_back_z_relative
+	_arm_order_saved = false
 
 
 func _update_face(delta: float) -> void:
@@ -578,9 +633,10 @@ func die() -> void:
 	is_dead = true
 	velocity = Vector2.ZERO
 	# Руки разжимаются насовсем: труп опускается рядом, а скрытая передняя рука возвращается
-	# (иначе с выключенным _process она так и осталась бы спрятанной — см. _apply_art_scale).
+	# явно — ниже выключается _process, и поставить порядок рук больше некому.
 	if _carried != null:
 		_drop_corpse()
+	_restore_arm_order()
 	_apply_art_scale()
 	set_physics_process(false)   # движение выключено
 	set_process(false)           # ввод/прицел/анимация выключены
@@ -618,15 +674,10 @@ func _apply_art_scale() -> void:
 	# Гнездо трупа лежит ВНУТРИ Visual/Body: зеркало и масштаб оно получает от родителя,
 	# поэтому тут только позиция (база из сцены плюс подстройка экспортами).
 	carry_point.position = _carry_base + Vector2(carry_offset_x, carry_offset_y)
-	# Труп в руках: передняя рука (та, что на стороне взгляда) рисует кисть поверх трупа —
-	# прячем её целиком, остаётся только задняя рука, замершая в позе «держу». z_index
-	# поднимаем, чтобы кисть задней руки была видна поверх трупа. Без трупа передняя рука
-	# снова показывается, а обе руки возвращаются в обычный порядок отрисовки сцены.
-	var carrying := _carried != null
-	arm_front.visible = not carrying
-	var arms_z := 1 if carrying else 0
-	arm_front.z_index = arms_z
-	arm_back.z_index = arms_z
+	# Порядок отрисовки рук тут НЕ трогаем: он меняется только в момент подбора и возврата
+	# трупа (см. _raise_arms_over_corpse / _restore_arm_order). Выводить его каждый кадр из
+	# _carried нельзя: если руки приподняты, а труп на самом деле лежит на земле, рука
+	# окажется нарисованной поверх трупа — как раз то, что и было.
 	if is_equal_approx(_applied_art_scale, s):
 		return
 	_applied_art_scale = s
