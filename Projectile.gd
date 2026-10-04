@@ -1,11 +1,13 @@
 extends Area2D
 ## Снаряд — камень (Sprites/stone.bmp). Летит в сторону курсора от Muzzle по дуге,
 ## исчезает при попадании в стену/врага, по таймеру жизни и при выходе за экран.
-## Слои: collision_layer = 4 (снаряды), collision_mask = 2|4... см. сцену
-## (маска = враги (layer 2) + земля/стены (layer 3)).
+## Слои: collision_layer = 4 (снаряды), collision_mask = 2|3|9 — см. сцену
+## (маска = враги (layer 2) + земля/стены (layer 3) + башня (layer 9)).
 ## Попадание во врага: у цели вызывается take_hit(damage, direction) — урон берётся
 ## из data.damage, направление — вектор полёта (см. Enemy.gd). Враг — тело
 ## (CharacterBody2D), поэтому он приходит в _on_body_entered, а не в _on_area_entered.
+## Попадание в башню идёт по тому же пути: у Tower.take_hit та же сигнатура, но HP она так
+## НЕ теряет — только дёргается, а камень всё равно исчезает (см. Tower.gd).
 ##
 ## ЧИСЛА типа снаряда (текстура/скорость/гравитация/урон/время жизни) лежат в
 ## ProjectileData.gd (ресурс .tres), а поведение — здесь. Новый тип снаряда:
@@ -37,9 +39,9 @@ const ProjectileData := preload("res://ProjectileData.gd")
 ## Масштаб арта; игрок подставляет свой art_scale при спавне.
 @export var art_scale: float = 0.35
 ## Доп. масштаб картинки камня.
-@export var sprite_scale: float = 1.0
+@export var sprite_scale: float = 0.6
 ## Радиус попадания в пикселях арта (сам камень ~143 px в диаметре).
-@export var hit_radius: float = 62.0
+@export var hit_radius: float = 40.0
 
 @onready var sprite: Sprite2D = $Sprite
 @onready var notifier: VisibleOnScreenNotifier2D = $Notifier

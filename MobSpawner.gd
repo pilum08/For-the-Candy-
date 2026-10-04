@@ -2,11 +2,14 @@ extends Node
 class_name MobSpawner
 ## СПАВНЕР МОБОВ: ставит врагов справа за краем экрана по таблице (SpawnTable) и следит
 ## за живыми. Живёт в уровне (main.tscn). Своих координат не требует: место появления
-## считается от Camera2D, высота — лучом вниз до земли.
+## считается от Camera2D, высота — лучом вниз до земли. Позицию можно и задать снаружи —
+## тогда моб встаёт ровно в неё, а камера не спрашивается (так спавнит башня — из своей
+## двери, см. Tower.gd).
 ##
 ## ЧТО ДЕЛАЕТ:
-##   * spawn_mob(table) — один моб: таблица тянет жребий (какая запись), запись даёт сцену
-##     врага (mob_scene) либо паспорт вида (mob_data + prototype_scene);
+##   * spawn_mob(table, at) — один моб: таблица тянет жребий (какая запись), запись даёт
+##     сцену врага (mob_scene) либо паспорт вида (mob_data + prototype_scene), а at —
+##     точку появления (по умолчанию — считать от камеры);
 ##   * spawn_group(count, table, interval) — пачка мобов с паузой между ними;
 ##   * заспавненным ставит группу "mobs", считает живых (alive_count), а смерть моба
 ##     пробрасывает наружу сигналом mob_died(mob) — это сигнал Enemy.died.
@@ -21,6 +24,9 @@ class_name MobSpawner
 
 ## Группа, в которую попадает каждый заспавненный моб.
 const MOB_GROUP: StringName = &"mobs"
+## Метка «позиция не задана» для аргумента at у spawn_mob(): считать точку появления от
+## камеры, как раньше. Vector2.INF настоящей координатой не бывает: is_finite() даёт false.
+const SPAWN_AT_CAMERA := Vector2.INF
 
 # ============================================================================
 # СИГНАЛЫ
@@ -87,13 +93,19 @@ func _ready() -> void:
 ## Поставить одного моба: таблица тянет жребий, моб появляется справа за краем экрана.
 ## Бежать к игроку он начинает сам: Enemy.gd гоняется за целью из группы, не глядя на
 ## расстояние (ограничителя дистанции там нет).
-## Вернёт null (с предупреждением в консоль), если спавнить нечем: нет Camera2D, таблицы,
-## годной записи или сцены в записи.
-func spawn_mob(table: SpawnTable = null) -> Node2D:
-	var cam := get_viewport().get_camera_2d()
-	if cam == null:
-		push_warning("MobSpawner: в сцене нет Camera2D — кромку экрана считать не от чего, спавн пропущен.")
-		return null
+## at — куда поставить моба, мировые координаты. По умолчанию SPAWN_AT_CAMERA: точку считаем
+## от камеры (справа за краем экрана, высота — лучом вниз до земли). Позиция задана, например
+## дверью башни — моб встаёт ровно в at, камера не спрашивается вовсе.
+## Вернёт null (с предупреждением в консоль), если спавнить нечем: нет Camera2D (только когда
+## точку считаем от камеры), нет таблицы, таблица не дала годной записи или сцены в записи.
+func spawn_mob(table: SpawnTable = null, at: Vector2 = SPAWN_AT_CAMERA) -> Node2D:
+	var from_camera := not at.is_finite()
+	var cam: Camera2D = null
+	if from_camera:
+		cam = get_viewport().get_camera_2d()
+		if cam == null:
+			push_warning("MobSpawner: в сцене нет Camera2D — кромку экрана считать не от чего, спавн пропущен.")
+			return null
 	var src: SpawnTable = table if table != null else default_table
 	if src == null:
 		push_warning("MobSpawner: не задана таблица спавна (default_table).")
@@ -115,7 +127,7 @@ func spawn_mob(table: SpawnTable = null) -> Node2D:
 	if parent == null:
 		parent = get_parent()
 	parent.add_child(mob)
-	mob.global_position = _spawn_point(cam)
+	mob.global_position = _spawn_point(cam) if from_camera else at
 	_register(mob)
 	mob_spawned.emit(mob)
 	return mob
@@ -165,10 +177,11 @@ func _on_mob_died(mob: Node2D) -> void:
 	mob_died.emit(mob)
 
 # ============================================================================
-# МЕСТО ПОЯВЛЕНИЯ (всё считается от камеры: координат уровня спавнер не знает)
+# МЕСТО ПОЯВЛЕНИЯ (по умолчанию считается от камеры: координат уровня спавнер не знает)
 # ============================================================================
 ## Точка появления: x — правая кромка видимой области + spawn_margin (то есть за кадром),
 ## y — земля под этой точкой (луч вниз) или spawn_y, если луч не нужен.
+## Зовётся только когда позиция не задана снаружи (см. spawn_mob, аргумент at).
 func _spawn_point(cam: Camera2D) -> Vector2:
 	# get_screen_center_position — то, что камера видит СЕЙЧАС (учитывает лимиты и сглаживание).
 	var center := cam.get_screen_center_position()

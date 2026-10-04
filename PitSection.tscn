@@ -1,0 +1,44 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://PitSection.gd" id="1_section"]
+[ext_resource type="Script" path="res://SpikeZone.gd" id="2_spikes"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_section_death"]
+size = Vector2(170, 30)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_section_catch"]
+size = Vector2(170, 110)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_section_floor"]
+size = Vector2(170, 40)
+
+[node name="PitSection" type="Node2D"]
+script = ExtResource("1_section")
+
+[node name="DeathZone" type="Area2D" parent="."]
+collision_layer = 0
+collision_mask = 1
+monitorable = false
+script = ExtResource("2_spikes")
+
+[node name="Shape" type="CollisionShape2D" parent="DeathZone"]
+position = Vector2(85, 95)
+shape = SubResource("RectangleShape2D_section_death")
+
+[node name="CatchZone" type="Area2D" parent="."]
+collision_layer = 0
+collision_mask = 16
+monitorable = false
+
+[node name="Shape" type="CollisionShape2D" parent="CatchZone"]
+position = Vector2(85, 55)
+shape = SubResource("RectangleShape2D_section_catch")
+
+[node name="Floor" type="StaticBody2D" parent="."]
+collision_layer = 4
+collision_mask = 0
+
+[node name="Shape" type="CollisionShape2D" parent="Floor"]
+position = Vector2(85, 20)
+shape = SubResource("RectangleShape2D_section_floor")
+disabled = true

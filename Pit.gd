@@ -1,146 +1,144 @@
 extends Node2D
-## ЯМА С ШИПАМИ И ЗАМОРОЖЕННЫМИ ТРУПАМИ (часть Б).
+## ЯМА ИЗ СЕКЦИЙ (часть Б).
 ##
-## PitZone (Area2D, маска = слой 5 «тела») ловит трупы из группы "corpses". Труп, который
-## лежит в яме и почти не двигается settle_time секунд, ЗАМОРАЖИВАЕТСЯ: freeze = true,
-## freeze_mode = STATIC, collision_layer = слой 6 «замороженные тела», маска = 0. Такой труп
-## становится твёрдым куском пола — герой и враги ходят по нему (слой 6 добавлен в их маски),
-## а сам он ни с чем не сталкивается. Трупа в руках это не касается: в руках труп лежит
-## на слое 0 (Corpse.pickup гасит слои), поэтому PitZone его не видит вовсе.
+## Яма — это N секций в ряд (PitSection.tscn, N = section_count). Каждая секция — одна ячейка от
+## уровня пола до дна ямы; что происходит внутри ячейки, описано в PitSection.gd. Правила ямы:
+##   * труп, упавший в ПУСТУЮ секцию, там останавливается: тело удаляется, а в секции встаёт его
+##     плоская картинка; секция становится ЗАПОЛНЕННОЙ — пол включается, смерть гаснет, по ней
+##     можно идти;
+##   * труп, упавший на ЗАПОЛНЕННУЮ секцию, падает на её пол (уровень пола) и остаётся обычным
+##     физическим трупом: секцию он не меняет, подбирается и бросается как всегда, лимит трупов
+##     считает его как обычно;
+##   * пока секция пуста, смертельна только полоса шипов у её дна: шагнувший в ячейку герой
+##     падает через всю глубину ямы и умирает уже на дне. Прыжка в игре нет, перепрыгнуть яму
+##     нечем.
 ##
-## Верх замороженного трупа подтягивается к уровню пола (см. max_depth): тело встаёт заподлицо,
-## и по нему можно перейти яму. Когда замороженных тел стало >= required_corpses (0 = выключено),
-## шипы гаснут (monitoring = false) и скрываются — «мост» закрывается и логикой, и просто тем,
-## что герой идёт по телам выше шипов.
+## Когда заполнены ВСЕ секции: сигнал pit_completed, печать в консоль «Яма заполнена», шипы
+## (SpikeZone: зона смерти и визуал) гаснут — пройти яму можно поверх полов секций, а они ровно
+## на уровне пола, как обычная земля. Заполненные секции безопасны сразу и по отдельности:
+## ходить по ним можно, не дожидаясь последней, а шагнуть в соседнюю пустую — смерть.
 ##
-## ШИПЫ: узел SpikeZone с уже существующим SpikeZone.gd — при касании героя зовётся тот же
-## Player.die(), что и при ударе врага. Своей логики смерти у ямы нет.
+## ЧТО В ПИТЕ (Pit.tscn), кроме секций:
+##   Bottom (StaticBody2D, слой 4 «земля») — дно ямы на всю её ширину (Shape 680×40 при +130, то
+##   есть верх ровно на pit_depth): на нём лежат упавшие трупы, обломки героя и сам герой;
+##   SpikeZone (Area2D, маска 1, SpikeZone.gd) — шипы: серая подложка дна (узел Visual, его не
+##   трогаем) и смертельная полоса у дна (Shape 680×30 при +95 = нижние 30 px ямы — та же
+##   полоса, что у DeathZone в секциях, см. PitSection.gd);
+##   Sections (Node2D) — сюда _build_sections кладёт секции (в редакторе секций не видно: они
+##   создаются в рантайме).
+## Начало координат Pit — УРОВЕНЬ ПОЛА: секции ставятся по X в ряд, Y = 0 (см. PitSection.gd).
 ##
-## ГЕОМЕТРИЯ — в Pit.tscn (начало координат ямы = УРОВЕНЬ ПОЛА, поэтому max_depth = 0 значит
-## «верх трупа не ниже уровня пола», и при переносе ямы в другое место число не меняется):
-##   PitZone/Shape   — весь проём ямы (что считать «трупом в яме»);
-##   Floor/Shape     — дно ямы (StaticBody2D, слой 3 «земля»: трупы и герой падают на него);
-##   SpikeZone       — шипы на дне (Shape + Visual правятся в сцене).
+## ГЕОМЕТРИЯ: pit_width — ширина ямы (по умолчанию 680 — как Shape узлов Bottom и SpikeZone в
+## сцене), pit_depth — от уровня пола до дна (110: верх Bottom/Shape 680×40 при +130). Ширина
+## секции = pit_width / section_count; она должна быть похожа на ширину трупа (арт
+## Enemy_corpse.png 784×589 при art_scale 0.21, то есть ≈165×124 px): картинка трупа в ячейке НЕ
+## подгоняется по размеру, поэтому в узких секциях картинки налезут друг на друга, а в широких
+## между ними будет просвет (см. PitSection._spawn_fill).
+##
+## Слой 6 «замороженные тела» ямой не используется (заморозки физикой нет, и в масках героя и
+## врагов его нет). Сам слой в project.godot оставлен — см. docs/SETUP.md, раздел про слои.
 
-## Слой 5 «тела» — обычный труп врага (Corpse.tscn: collision_layer = 16).
-const CORPSE_LAYER: int = 16
-## Слой 6 «замороженные тела» — труп стал твёрдым полом (см. project.godot, layer_6).
-const FROZEN_LAYER: int = 32
-## Группа трупов (Corpse.tscn: groups=["corpses"]).
-const CORPSE_GROUP: StringName = &"corpses"
+const PIT_SECTION_SCENE := preload("res://PitSection.tscn")
 
-@export_group("Заморозка")
-## Скорость (px/с), ниже которой труп считается «лёг» и начинает накапливать время покоя.
+@export_group("Секции")
+## Сколько секций в ряду. Ширина секции = pit_width / section_count.
+@export_range(1, 16, 1) var section_count: int = 4
+## Ширина ямы (px). По умолчанию 680 — как Shape узлов Bottom и SpikeZone в сцене: дыру задают
+## они, поэтому, поменяв число здесь, поправь и их.
+@export var pit_width: float = 680.0
+## Глубина ямы (px) от уровня пола до дна: по ней садится на дно картинка трупа (см. PitSection).
+## 110 снято со сцены — верх Bottom/Shape 680×40 при +130.
+@export var pit_depth: float = 110.0
+
+@export_group("Смерть в пустой секции")
+## Высота смертельной полосы шипов у дна секции (px, от дна вверх, во всю ширину секции). Пока
+## секция пуста и её пол выключен, герой падает через всю глубину ямы и умирает на дне — смерть
+## ждёт его только в этой полосе (плюс такая же полоса у шипов самой ямы, узел SpikeZone).
+@export var spike_kill_height: float = 30.0
+
+@export_group("Заполнение секции")
+## Скорость (px/с), ниже которой труп в ячейке считается «лёг».
 @export var settle_speed: float = 30.0
-## Сколько секунд подряд труп должен лежать в яме почти неподвижно, чтобы замёрзнуть.
+## Сколько секунд подряд труп должен пролежать в ячейке почти неподвижно, чтобы её заполнить.
 @export var settle_time: float = 0.3
-## Насколько низко (px от начала координат Pit) допустим верх трупа после заморозки.
-## 0 — уровень пола: тело подтягивается вверх и встаёт заподлицо с полом.
-@export var max_depth: float = 0.0
+## Страховка: труп провалялся в ячейке столько секунд, так и не успокоившись (катится, дрожит
+## на другом трупе). Истекло — ячейка всё равно заполняется.
+@export var settle_timeout: float = 1.5
+## На сколько пикселей низ картинки трупа выше дна ячейки (0 — ровно на дне).
+@export var bottom_overlap_px: float = 6.0
+## Разброс картинки по X от центра ячейки, ±px. Картинка не подгоняется под ячейку, поэтому при
+## большом сдвиге труп налезет на соседнюю секцию — это допустимо (см. PitSection.gd).
+@export var x_jitter: float = 8.0
+## Разброс наклона картинки, ±градусы. 0 — строго плоско.
+@export_range(0.0, 45.0, 0.5) var tilt_jitter: float = 5.0
 
-@export_group("Мост")
-## Сколько замороженных тел закрывает яму. 0 — выключено: шипы работают всегда.
-@export var required_corpses: int = 0
+## Секция заполнена (index — её номер). Секция безопасна для героя сразу после этого.
+signal section_filled(index: int)
+## Заполнены все секции: яма пройдена.
+signal pit_completed
 
-@onready var pit_zone: Area2D = $PitZone
 @onready var spike_zone: Area2D = $SpikeZone
+@onready var sections_root: Node2D = $Sections
 
-## Трупы в яме, которые ещё не замёрзли: тело → сколько секунд подряд оно почти не двигалось.
-var _calm: Dictionary = {}
-## Замороженные этой ямой тела: по их числу решается, закрылись ли шипы (required_corpses).
-var _frozen: Array[RigidBody2D] = []
+## Секции по порядку (0 — левая).
+var _sections: Array[PitSection] = []
+## Сколько секций заполнено.
+var _filled: int = 0
+## Все секции заполнены (защита от повторной обработки: сигнал и печать — один раз).
+var _completed: bool = false
 
 
 func _ready() -> void:
-	pit_zone.body_entered.connect(_on_pit_body_entered)
-	pit_zone.body_exited.connect(_on_pit_body_exited)
-	_refresh_spikes()
+	_build_sections()
+	# Начальное состояние шипов: пока секции пусты, дно ямы смертельно и нарисовано.
+	spike_zone.monitoring = true
+	spike_zone.visible = true
 
 
-func _physics_process(delta: float) -> void:
-	if _calm.is_empty():
+## Построить секции в ряд. Они создаются в рантайме (не @tool), поэтому в редакторе видно только
+## контейнер Sections. Все параметры заполнения копируются в каждую секцию ДО add_child: свою
+## геометрию (зоны, пол) секция раскладывает в _ready по этим числам.
+func _build_sections() -> void:
+	var count := maxi(section_count, 1)
+	var width := pit_width / float(count)
+	var x := -pit_width * 0.5   # левый край 1-й ячейки; X каждой следующей = правый край предыдущей
+	_sections.clear()
+	_filled = 0
+	_completed = false
+	for i in count:
+		var section := PIT_SECTION_SCENE.instantiate() as PitSection
+		section.index = i
+		section.section_width = width
+		section.pit_depth = pit_depth
+		section.spike_kill_height = spike_kill_height
+		section.settle_speed = settle_speed
+		section.settle_time = settle_time
+		section.settle_timeout = settle_timeout
+		section.bottom_overlap_px = bottom_overlap_px
+		section.x_jitter = x_jitter
+		section.tilt_jitter = tilt_jitter
+		# Y = 0 — уровень пола (начало координат секции, см. PitSection.gd).
+		section.position = Vector2(x, 0.0)
+		section.filled.connect(_on_section_filled)
+		sections_root.add_child(section)
+		_sections.append(section)
+		x += width
+
+
+## Секция заполнилась (труп улёгся в пустую ячейку): считаем и смотрим, вся ли яма заполнена.
+func _on_section_filled(index: int) -> void:
+	_filled += 1
+	section_filled.emit(index)
+	if _filled >= _sections.size():
+		_complete_pit()
+
+
+## Заполнены все секции: печать в консоль, шипы гаснут, сигнал pit_completed.
+func _complete_pit() -> void:
+	if _completed:
 		return
-	# keys() отдаёт копию списка, поэтому чистить _calm прямо в цикле безопасно.
-	for body in _calm.keys():
-		var corpse := body as RigidBody2D
-		# Труп исчез из мира или уже выехал из ямы — считать нечего.
-		if corpse == null or not is_instance_valid(corpse) or not pit_zone.overlaps_body(corpse):
-			_calm.erase(body)
-			continue
-		if corpse.linear_velocity.length() <= settle_speed:
-			_calm[body] = float(_calm[body]) + delta
-			if float(_calm[body]) >= settle_time:
-				_freeze(corpse)
-		else:
-			_calm[body] = 0.0   # задел/толкнули — отсчёт покоя заново
-
-
-## Труп в яме (влетел, упал, бросили). Считаем только настоящий труп на слое «тела»: труп
-## в руках героя лежит на слое 0 и сюда не попадает.
-func _on_pit_body_entered(body: Node2D) -> void:
-	if not body.is_in_group(CORPSE_GROUP) or body.collision_layer != CORPSE_LAYER:
-		return
-	_calm[body] = 0.0
-
-
-func _on_pit_body_exited(body: Node2D) -> void:
-	_calm.erase(body)
-
-
-## Труп лёг: замораживаем его, то есть делаем твёрдым куском пола.
-func _freeze(corpse: RigidBody2D) -> void:
-	_calm.erase(corpse)
-	# Страховка: если труп всё-таки оказался в руках (слои погашены) — не трогаем его.
-	if corpse.collision_layer != CORPSE_LAYER:
-		return
-	# Верх считаем ДО заморозки: на эту же дельту труп надо будет подтянуть вверх.
-	var top := _body_top_y(corpse)
-	corpse.linear_velocity = Vector2.ZERO
-	corpse.angular_velocity = 0.0
-	corpse.freeze_mode = RigidBody2D.FREEZE_MODE_STATIC
-	corpse.freeze = true
-	# Верх трупа не должен уходить ниже уровня пола: тело встаёт заподлицо, и по нему идут.
-	var limit := global_position.y + max_depth
-	if top > limit:
-		corpse.global_position.y -= top - limit
-	# Твёрдый пол: слой 6 «замороженные тела» (его видят герой и враги), маска 0 — сам ни с чем
-	# не сталкивается. Обычный труп (слой 5) остаётся проходимым для всех.
-	corpse.collision_layer = FROZEN_LAYER
-	corpse.collision_mask = 0
-	_frozen.append(corpse)
-	_refresh_spikes()
-
-
-## Шипы: пока замороженных тел меньше required_corpses, они включены. required_corpses = 0 —
-## выключено, шипы работают всегда (мост держится только на самих телах).
-func _refresh_spikes() -> void:
-	var closed := required_corpses > 0 and _count_frozen() >= required_corpses
-	spike_zone.monitoring = not closed
-	spike_zone.visible = not closed
-
-
-## Сколько замороженных тел реально ещё в игре (замороженное тело никто не удаляет: страховка).
-func _count_frozen() -> int:
-	var alive := 0
-	for corpse in _frozen:
-		if is_instance_valid(corpse):
-			alive += 1
-	return alive
-
-
-## Верх тела в мировых координатах. Форма трупа — капсула (Corpse.tscn → Collider), её верх —
-## это верхняя из двух чашек капсулы минус радиус. Труп мог катиться (форма повёрнута), поэтому
-## берём мировой трансформ формы, а не локальные числа: у Corpse scale всегда 1, так что радиус
-## и высота капсулы — уже мировые.
-func _body_top_y(body: Node2D) -> float:
-	var shape_node := body.get_node_or_null("Collider") as CollisionShape2D
-	if shape_node == null:
-		return body.global_position.y
-	var capsule := shape_node.shape as CapsuleShape2D
-	if capsule == null:
-		return body.global_position.y
-	var half_axis := maxf(capsule.height * 0.5 - capsule.radius, 0.0)
-	var xf := shape_node.global_transform
-	var a := xf * Vector2(0.0, -half_axis)
-	var b := xf * Vector2(0.0, half_axis)
-	return minf(a.y, b.y) - capsule.radius
+	_completed = true
+	spike_zone.monitoring = false   # шипы больше никого не убивают
+	spike_zone.visible = false      # и не нарисованы
+	print("Яма заполнена")
+	pit_completed.emit()

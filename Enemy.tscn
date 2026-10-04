@@ -13,7 +13,7 @@ size = Vector2(98.7, 130.2)
 
 [node name="Enemy" type="CharacterBody2D" groups=["enemies"]]
 collision_layer = 2
-collision_mask = 36
+collision_mask = 4
 floor_snap_length = 4.0
 script = ExtResource("1_enemy")
 corpse_scene = ExtResource("10_corpse")

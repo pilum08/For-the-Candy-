@@ -19,7 +19,7 @@ size = Vector2(94.92, 73.079997)
 radius = 189.0
 
 [node name="Player" type="CharacterBody2D" groups=["player"] unique_id=1694100496]
-collision_mask = 36
+collision_mask = 4
 floor_snap_length = 4.0
 script = ExtResource("1_hp6x6")
 projectile_scene = ExtResource("2_3tkgg")

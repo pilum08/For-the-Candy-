@@ -2,7 +2,7 @@ extends CharacterBody2D
 ## Герой «Дон»: собран из готовых картинок (Sprites/DON*), анимация стоп-моушен,
 ## передняя рука наводится на курсор, стрельба камнем (Sprites/stone.bmp).
 ##
-## ВСЕ ПОЗЫ — в таблицах IDLE_POSES / WALK_POSES / AIR_UP_POSE / AIR_DOWN_POSE ниже.
+## ВСЕ ПОЗЫ — в таблицах IDLE_POSES / WALK_POSES / AIR_DOWN_POSE ниже.
 ## Углы в градусах, смещения в пикселях АРТА (умножаются на art_scale).
 ## Микро-джиттер (±1-2 px, ±2°) вшит прямо в числа таблиц — никакого Random в рантайме.
 
@@ -137,16 +137,6 @@ const WALK_POSES: Array = [
 	},
 ]
 
-## Прыжок (взлёт): ноги поджаты, задняя рука задрана вверх.
-const AIR_UP_POSE: Dictionary = {
-	"body_pos": Vector2(0.0, -2.0), "body_rot": -3.0,
-	"head_pos": Vector2(0.0, -1.0), "head_rot": 2.0,
-	"skirt_pos": Vector2(0.0, 1.0), "skirt_rot": -6.0,
-	"leg_l_pos": Vector2(0.0, -4.0), "leg_l_rot": -18.0,
-	"leg_r_pos": Vector2(0.0, -2.0), "leg_r_rot": 16.0,
-	"arm_back_rot": 26.0,
-}
-
 ## Падение: ноги растопырены, задняя рука машет вниз.
 const AIR_DOWN_POSE: Dictionary = {
 	"body_pos": Vector2(0.0, 0.0), "body_rot": 2.0,
@@ -167,8 +157,8 @@ const AIR_DOWN_POSE: Dictionary = {
 ## применяется к Visual (а Muzzle — его ребёнок, поэтому уменьшается вместе с ним)
 ## и к коллайдеру. Корень CharacterBody2D не масштабируем: сломалась бы физика.
 @export_range(0.1, 2.0, 0.01) var player_scale: float = 0.6
-## Пересчитывать скорость/прыжок/гравитацию вместе с player_scale (см. _motion_scale):
-## при 0.6 герой бежит 240 px/с и прыгает на ~185 px — то же самое «в своих ростах».
+## Пересчитывать скорость/гравитацию вместе с player_scale (см. _motion_scale):
+## при 0.6 герой бежит 240 px/с — то же самое «в своих ростах».
 ## Снять галочку — числа останутся мировыми (px), как до уменьшения героя.
 @export var scale_movement_with_player: bool = true
 ## Включить лица-оверлеи (idle по умолчанию, shoot на время выстрела).
@@ -180,9 +170,6 @@ const AIR_DOWN_POSE: Dictionary = {
 @export var friction: float = 2800.0
 @export var gravity: float = 2200.0
 @export var max_fall_speed: float = 1400.0
-@export var jump_velocity: float = -1150.0
-## Отпустил прыжок в полёте — высота прыжка урезается (0.45 = короткий прыжок).
-@export_range(0.0, 1.0, 0.05) var jump_cut: float = 0.45
 
 @export_group("Анимация (стоп-моушен)")
 ## Частота смены поз при ходьбе (кадров в секунду, позы меняются рывком).
@@ -223,13 +210,13 @@ const AIR_DOWN_POSE: Dictionary = {
 ## кисти оказались у боков трупа при дефолтных carry_offset_*.
 @export var carry_arm_angle_front: float = 69.0
 @export var carry_arm_angle_back: float = 176.0
-## Множители скорости ходьбы и силы прыжка, пока труп в руках.
+## Множитель скорости ходьбы, пока труп в руках.
 @export_range(0.05, 1.0, 0.05) var carry_speed_mult: float = 0.7
-@export_range(0.05, 1.0, 0.05) var carry_jump_mult: float = 0.75
-## Куда встаёт труп, когда его опускают (E второй раз): вперёд от стоп, пиксели арта.
-@export var drop_forward: float = 900.0
-## Лёгкий толчок вперёд в момент, когда труп опустили (px/с).
-@export var drop_impulse: float = 120.0
+## Куда встаёт труп, когда его кладут (E): x — вперёд по взгляду, y — вниз (пиксели арта).
+## Точку по земле уточняет луч вниз (см. _ground_point) — труп не встанет в пол или стену.
+@export var drop_offset: Vector2 = Vector2(900.0, 0.0)
+## Пауза после подбора и после «положить» (с): одно нажатие E не сделает два действия.
+@export var interact_cooldown: float = 0.2
 ## Скорость броска у самого героя и на предельной дистанции (px/с).
 @export var throw_speed_min: float = 450.0
 @export var throw_speed_max: float = 1200.0
@@ -298,6 +285,8 @@ var _carried: CorpseScript = null:
 ## ЛКМ уже потрачена броском: пока кнопку не отпустят, выстрела не будет. Иначе то самое
 ## нажатие, которым бросили труп, следующим кадром создаёт снаряд (ЛКМ-то ещё зажата).
 var _shoot_consumed: bool = false
+## Пауза E (см. interact_cooldown): пока > 0, подбор и «положить» не срабатывают.
+var _interact_timer: float = 0.0
 ## Порядок отрисовки рук на время переноски трупа: снимок «как было до подбора» (save_z),
 ## возврат — одним методом restore_z() при опускании, броске и смерти.
 var _arm_order_saved: bool = false
@@ -339,23 +328,18 @@ func _physics_process(delta: float) -> void:
 # ============================================================================
 func _move(delta: float) -> void:
 	# k — пересчёт движения под размер героя (см. _motion_scale): при player_scale = 0.6
-	# скорость, ускорение, трение, гравитация и прыжок умножаются на 0.6.
+	# скорость, ускорение, трение и гравитация умножаются на 0.6.
 	var k := _motion_scale()
 	if not is_on_floor():
 		velocity.y = minf(velocity.y + gravity * k * delta, max_fall_speed * k)
 
-	# С трупом в руках герой идёт медленнее и прыгает слабее (см. carry_* в экспортах).
+	# С трупом в руках герой идёт медленнее (см. carry_speed_mult).
 	var carry_mult := carry_speed_mult if _carried != null else 1.0
 	var dir := Input.get_axis("move_left", "move_right")
 	if absf(dir) > 0.01:
 		velocity.x = move_toward(velocity.x, dir * speed * k * carry_mult, acceleration * k * delta)
 	else:
 		velocity.x = move_toward(velocity.x, 0.0, friction * k * delta)
-
-	if Input.is_action_just_pressed("jump") and is_on_floor():
-		velocity.y = jump_velocity * k * (carry_jump_mult if _carried != null else 1.0)
-	if Input.is_action_just_released("jump") and velocity.y < 0.0:
-		velocity.y *= jump_cut
 
 	move_and_slide()
 	_update_state()
@@ -412,6 +396,7 @@ func _recoil_angle() -> float:
 func _tick_combat(delta: float) -> void:
 	_shoot_timer = maxf(_shoot_timer - delta, 0.0)
 	_recoil_timer = maxf(_recoil_timer - delta, 0.0)
+	_interact_timer = maxf(_interact_timer - delta, 0.0)
 	if Input.is_action_just_released("shoot"):
 		_shoot_consumed = false   # кнопку отпустили — следующее нажатие снова стреляет
 	if Input.is_action_just_pressed("interact"):
@@ -463,13 +448,20 @@ func _shoot() -> void:
 # ============================================================================
 # ТРУП: ПОДБОР (E) И БРОСОК (ЛКМ)
 # ============================================================================
-## E: руки пусты — берём ближайший труп из PickupZone; руки заняты — опускаем его.
+## E: руки пусты — берём ближайший труп из PickupZone; руки заняты — кладём его на землю.
+## Одно нажатие делает ровно одно действие: короткая пауза interact_cooldown мешает подбору и
+## «положить» сработать от одного нажатия. В воздухе (в падении) E не кладёт — ждём приземления.
 func _interact() -> void:
+	if _interact_timer > 0.0:
+		return
 	if _carried != null and not is_instance_valid(_carried):
 		_carried = null   # труп исчез из мира — руки снова пусты
 		restore_z()       # и порядок рук тоже: вернуть его тут больше негде
 	if _carried != null:
+		if not is_on_floor():
+			return        # в падении не кладём: иначе труп встанет в воздухе или в стене
 		_drop_corpse()
+		_interact_timer = interact_cooldown
 		return
 	var corpse := _nearest_corpse()
 	if corpse != null:
@@ -477,6 +469,7 @@ func _interact() -> void:
 		corpse.pickup(self, carried_scale_mult)
 		save_z()        # порядок рук «как было» — вернуть его сможет restore_z
 		raise_arm_z()   # и кисти над трупом, пока is_carrying = true
+		_interact_timer = interact_cooldown
 
 
 ## Ближайший труп из группы "corpses", попавший в PickupZone (её форму см. _apply_art_scale).
@@ -494,7 +487,8 @@ func _nearest_corpse() -> CorpseScript:
 	return best
 
 
-## Опускаем труп на землю перед собой (E второй раз) и слегка толкаем вперёд.
+## Кладём труп на землю перед собой (E): без броска — нулевая скорость, без вращения.
+## Точку по земле уточняем лучом вниз (см. _ground_point): труп не встанет в пол или стену.
 func _drop_corpse() -> void:
 	var corpse := _carried
 	_carried = null        # руки пусты: с этого момента подъём кистей запрещён
@@ -503,8 +497,30 @@ func _drop_corpse() -> void:
 		return
 	var s := maxf(art_scale, 0.01) * maxf(player_scale, 0.01)
 	# Начало координат трупа — его низ, поэтому точка впереди стоп кладёт его на землю.
-	var at := global_position + Vector2(drop_forward * float(_facing) * s, 0.0)
-	corpse.put_down(at, Vector2(drop_impulse * float(_facing), 0.0))
+	var at := global_position + Vector2(drop_offset.x * float(_facing) * s, drop_offset.y * s)
+	corpse.put_down(_ground_point(at, s), Vector2.ZERO)
+
+
+## Геометрия луча «положить» (пиксели арта): слой 3 «земля и стены» = бит 4, а начало и конец
+## луча заведомо шире коллизии трупа.
+const DROP_RAY_MASK := 4
+const DROP_RAY_UP := 300.0
+const DROP_RAY_DOWN := 300.0
+
+
+## Точка на земле под заданной точкой: луч вниз по земле и стенам. Промах — точка остаётся
+## как есть (например, над ямой: труп туда просто упадёт сам).
+func _ground_point(point: Vector2, s: float) -> Vector2:
+	# Маска — только слой 3 «земля и стены», поэтому свой коллайдер (слой 1) лучу не мешает.
+	var query := PhysicsRayQueryParameters2D.create(
+		point - Vector2(0.0, DROP_RAY_UP * s),
+		point + Vector2(0.0, DROP_RAY_DOWN * s),
+		DROP_RAY_MASK
+	)
+	var hit := get_world_2d().direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		return point
+	return hit["position"] as Vector2
 
 
 ## Бросок по дуге в сторону курсора: рука дёргается назад (как отдача), дальше труп летит сам.
@@ -624,8 +640,6 @@ func _pose_for_state() -> Dictionary:
 			var walk: Array = WALK_POSES
 			return walk[_pose_index % walk.size()]
 		State.AIR:
-			if velocity.y < 0.0:
-				return AIR_UP_POSE
 			return AIR_DOWN_POSE
 		_:
 			var idle: Array = IDLE_POSES
@@ -747,8 +761,8 @@ func _attach(part_name: String) -> Vector2:
 
 
 ## Коэффициент пересчёта движения под размер героя. player_scale = 0.6 → скорость,
-## ускорение, трение, прыжок и гравитация умножаются на 0.6: высота прыжка (~185 px)
-## и время прыжка остаются теми же «в ростах героя». Галочка снята — числа мировые.
+## ускорение, трение и гравитация умножаются на 0.6: числа остаются тем же «в ростах
+## героя». Галочка снята — числа мировые.
 func _motion_scale() -> float:
 	if not scale_movement_with_player:
 		return 1.0

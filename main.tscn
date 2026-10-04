@@ -12,6 +12,7 @@
 [ext_resource type="Resource" path="res://wave_3.tres" id="10_wave3"]
 [ext_resource type="PackedScene" path="res://EncounterTrigger.tscn" id="11_encounter"]
 [ext_resource type="PackedScene" path="res://WaveTrigger.tscn" id="12_wavetrig"]
+[ext_resource type="PackedScene" path="res://Tower.tscn" id="13_tower"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ryguw"]
 size = Vector2(530, 120)
@@ -53,19 +54,17 @@ shape = SubResource("RectangleShape2D_groundR")
 
 [node name="Pit" parent="." unique_id=513324870 instance=ExtResource("4_pit")]
 position = Vector2(-1130, 0)
-required_corpses = 3
 
-[node name="Fortification" type="Node2D" parent="."]
+[node name="Fortification" type="Node2D" parent="." unique_id=828071248]
 position = Vector2(850, 0)
 
-[node name="Visual" type="ColorRect" parent="Fortification"]
+[node name="Visual" type="ColorRect" parent="Fortification" unique_id=1105537937]
 offset_left = -70.0
 offset_top = -620.0
 offset_right = 70.0
-offset_bottom = 0.0
 color = Color(0.34, 0.31, 0.36, 1)
 
-[node name="Label" type="Label" parent="Fortification"]
+[node name="Label" type="Label" parent="Fortification" unique_id=1849723312]
 offset_left = -190.0
 offset_top = -710.0
 offset_right = 190.0
@@ -74,48 +73,55 @@ theme_override_font_sizes/font_size = 48
 text = "Укрепление"
 horizontal_alignment = 1
 
+[node name="Tower" parent="." instance=ExtResource("13_tower")]
+position = Vector2(1800, 0)
+spawner = NodePath("../MobSpawner")
+
 [node name="Player" parent="." unique_id=1694100496 instance=ExtResource("1_efxa6")]
 position = Vector2(0, -140)
 idle_pose_fps = 2.0
-death_hold_time = 0.3
+shoot_cooldown = 0.5
+death_hold_time = 0.2
 
-[node name="Camera" type="Camera2D" parent="Player" groups=["camera"] unique_id=1797260378]
+[node name="Camera" type="Camera2D" parent="Player" unique_id=1797260378 groups=["camera"]]
 position = Vector2(0, -140)
 limit_left = -2000
 position_smoothing_enabled = true
 position_smoothing_speed = 8.0
 script = ExtResource("2_camfk")
 
-[node name="Encounter1" parent="." instance=ExtResource("11_encounter")]
+[node name="Encounter1" parent="." unique_id=2007818204 instance=ExtResource("11_encounter")]
 position = Vector2(250, 0)
 count = 1
 spawner = NodePath("../MobSpawner")
 
-[node name="Encounter2" parent="." instance=ExtResource("11_encounter")]
+[node name="Encounter2" parent="." unique_id=1480851264 instance=ExtResource("11_encounter")]
 position = Vector2(500, 0)
-count = 2
 spawner = NodePath("../MobSpawner")
 
-[node name="WaveTrigger" parent="." instance=ExtResource("12_wavetrig")]
+[node name="WaveTrigger" parent="." unique_id=233383667 instance=ExtResource("12_wavetrig")]
+process_mode = 4
+monitoring = false
 position = Vector2(750, 0)
 wave_manager = NodePath("../WaveManager")
 camera = NodePath("../Player/Camera")
 left_wall = NodePath("../PlayersWall")
 
-[node name="PlayersWall" type="StaticBody2D" parent="." groups=["wave_wall"]]
+[node name="PlayersWall" type="StaticBody2D" parent="." unique_id=554725277 groups=["wave_wall"]]
 position = Vector2(430, 0)
 collision_layer = 4
 collision_mask = 0
 
-[node name="Shape" type="CollisionShape2D" parent="PlayersWall"]
+[node name="Shape" type="CollisionShape2D" parent="PlayersWall" unique_id=53390229]
 shape = SubResource("RectangleShape2D_wave_wall")
 disabled = true
 
-[node name="MobSpawner" type="Node" parent="." groups=["mob_spawner"] unique_id=364961159]
+[node name="MobSpawner" type="Node" parent="." unique_id=364961159 groups=["mob_spawner"]]
 script = ExtResource("5_spawner")
 default_table = ExtResource("6_table")
 
-[node name="WaveManager" type="Node" parent="." groups=["wave_manager"] unique_id=1099234511]
+[node name="WaveManager" type="Node" parent="." unique_id=1099234511 groups=["wave_manager"]]
+process_mode = 4
 script = ExtResource("7_waves")
 waves = Array[ExtResource("8_efxa6")]([ExtResource("8_wave1"), ExtResource("9_wave2"), ExtResource("10_wave3")])
 spawner = NodePath("../MobSpawner")
