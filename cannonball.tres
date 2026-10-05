@@ -1,0 +1,17 @@
+[gd_resource type="Resource" format=3]
+
+[ext_resource type="Script" path="res://ProjectileData.gd" id="1_data"]
+[ext_resource type="Texture2D" path="res://Sprites/cannonball.png" id="2_ball"]
+
+[resource]
+script = ExtResource("1_data")
+texture = ExtResource("2_ball")
+native_mult = 1.0
+size_mult = 2.0
+speed = 1450.0
+gravity = 1400.0
+lifetime = 4.0
+damage = 1000.0
+pierce_enemies = true
+can_damage_tower = true
+report_miss = true

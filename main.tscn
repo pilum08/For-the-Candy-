@@ -13,6 +13,8 @@
 [ext_resource type="PackedScene" path="res://EncounterTrigger.tscn" id="11_encounter"]
 [ext_resource type="PackedScene" path="res://WaveTrigger.tscn" id="12_wavetrig"]
 [ext_resource type="PackedScene" path="res://Tower.tscn" id="13_tower"]
+[ext_resource type="Script" uid="uid://5xpjbqckc7cl" path="res://LevelController.gd" id="14_level"]
+[ext_resource type="PackedScene" uid="uid://cl88vmwdq5s11" path="res://Cannon.tscn" id="15_cannon"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ryguw"]
 size = Vector2(530, 120)
@@ -73,8 +75,9 @@ theme_override_font_sizes/font_size = 48
 text = "Укрепление"
 horizontal_alignment = 1
 
-[node name="Tower" parent="." instance=ExtResource("13_tower")]
+[node name="Tower" parent="." unique_id=1131248360 instance=ExtResource("13_tower")]
 position = Vector2(1800, 0)
+group_size = 2
 spawner = NodePath("../MobSpawner")
 
 [node name="Player" parent="." unique_id=1694100496 instance=ExtResource("1_efxa6")]
@@ -101,8 +104,8 @@ spawner = NodePath("../MobSpawner")
 
 [node name="WaveTrigger" parent="." unique_id=233383667 instance=ExtResource("12_wavetrig")]
 process_mode = 4
-monitoring = false
 position = Vector2(750, 0)
+monitoring = false
 wave_manager = NodePath("../WaveManager")
 camera = NodePath("../Player/Camera")
 left_wall = NodePath("../PlayersWall")
@@ -125,3 +128,9 @@ process_mode = 4
 script = ExtResource("7_waves")
 waves = Array[ExtResource("8_efxa6")]([ExtResource("8_wave1"), ExtResource("9_wave2"), ExtResource("10_wave3")])
 spawner = NodePath("../MobSpawner")
+
+[node name="LevelController" type="Node" parent="." unique_id=489809977 groups=["level_controller"]]
+script = ExtResource("14_level")
+
+[node name="Cannon" parent="." unique_id=467123817 instance=ExtResource("15_cannon")]
+position = Vector2(-1750, 0)

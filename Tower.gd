@@ -13,11 +13,19 @@ class_name Tower
 ##   * считает ТОЛЬКО своих мобов: за каждого заспавненного подписывается на его died,
 ##     поэтому мобы засад (EncounterTrigger) и волн в счёт башни не входят;
 ##   * ПОПАДАНИЕ: take_hit() — только рывок, HP не меняется; apply_damage() — снимает HP;
-##   * ЛОМАЕТСЯ: destroy() — спавн стоп, коллизия off, «Башня разрушена. Победа!» в консоль,
-##     сигнал destroyed. Уже выпущенные мобы остаются на уровне.
+##   * ЛОМАЕТСЯ: destroy() — спавн стоп, коллизия off, «Башня разрушена.» в консоль и сигнал
+##     destroyed (на него подписан LevelController: он и объявляет «Победа!»). Уже выпущенные
+##     мобы остаются на уровне.
 ##
 ## ГДЕ ЖИВЁТ: отдельная сцена Tower.tscn, инстанцируется в уровень (main.tscn) справа, за
 ## всеми триггерами и засадами. Позиция узла — координаты земли уровня.
+##
+## РАЗМЕР: башня живёт по ЕДИНОМУ МАСШТАБУ АРТА (ArtScale, docs/SETUP.md раздел 16) — её рисунок
+## нарисован 1:1 вместе с героем, поэтому масштаб берётся у героя: заглушка
+## (Visual.scale), коллизия (Shape) и дверь (SpawnDoor) считаются от размера исходного рисунка
+## NATIVE_SIZE × ArtScale.hero_scale() × native_mult × size_mult — см. _apply_size.
+## Корень StaticBody2D всегда scale = ONE: масштаб живёт только на Visual, а форма и дверь
+## получают уже мировые числа.
 ##
 ## СЛОИ: корпус на слое 9 «башня» (бит 256), маска 0 — сам никого не ищет (как Ground).
 ## Героя и врагов не блокирует: в их масках (4 = земля) слоя 9 нет. Попадает в башню
@@ -28,7 +36,9 @@ class_name Tower
 ##
 ## СВЯЗИ: Spawner (MobSpawner) — поле в инспекторе, пусто — берём узел из группы
 ## "mob_spawner" (в main.tscn спавнер в неё входит) и пишем предупреждение. Герой для
-## сигнала died ищется в группе "player" (как в WaveManager).
+## сигнала died ищется в группе "player" (как в WaveManager). Исход уровня — LevelController:
+## на его win() подписан наш destroyed (см. _connect_level_controller), а он глушит наш спавн
+## через stop_spawning().
 ##
 ## class_name стоит намеренно: по нему уровень и будущее ядро пушки видят тип Tower.
 
@@ -36,9 +46,15 @@ class_name Tower
 const PLAYER_GROUP: StringName = &"player"
 ## Группа, по которой ищем спавнер, если поле Spawner пустое (main.tscn: узел MobSpawner).
 const SPAWNER_GROUP: StringName = &"mob_spawner"
+## Группа контроллера уровня (main.tscn: узел LevelController) — его win() слушает destroyed.
+const LEVEL_CONTROLLER_GROUP: StringName = &"level_controller"
 ## Шаг проверки потолка max_alive, сек: пачку не выпускаем, но и следующую group_interval
 ## не ждём — просто проверяем, не освободился ли слот.
 const FULL_WAIT_STEP := 0.25
+## ИСХОДНЫЙ рисунок башни (Sprites/Construction/tower.png) в пикселях 1:1, как нарисовано.
+## По нему считаются заглушка, коллизия и дверь: файл в проекте ровно такого размера, поэтому
+## native_mult по умолчанию 1.0 (уменьшишь файл — native_mult = эта ширина / ширина файла).
+const NATIVE_SIZE := Vector2(2728.0, 2554.0)
 
 # ============================================================================
 # СИГНАЛЫ
@@ -65,6 +81,19 @@ signal destroyed
 @export var spawn_stagger: float = 0.5
 ## Кого выпускать. Пусто — общая таблица спавнера (MobSpawner.default_table).
 @export var spawn_table: SpawnTable
+
+@export_group("Размер")
+## Во сколько раз ИСХОДНЫЙ рисунок башни больше файла в проекте (исходная ширина / ширина файла).
+## Sprites/Construction/tower.png — 2728×2554, файл ровно такой → 1.0. Уменьшишь картинку —
+## поставь сюда 2728 / ширину нового файла (ArtScale.mult_for_native(2728, texture)).
+@export_range(0.1, 4.0, 0.01) var native_mult: float = 1.0
+## Подкрутка размера башни: 1.0 — как нарисовано (2728 px картинки → ≈573 px в мире, башня
+## заметно выше героя), больше — крупнее.
+@export_range(0.1, 4.0, 0.01) var size_mult: float = 1.0
+## Отступ двери мобов (SpawnDoor) от левого нижнего угла рисунка, пиксели арта: x — влево
+## (минус = наружу), y — вниз. Рисунок уменьшается/увеличивается вместе с башней, дверь едет
+## вместе с ним; если у tower.png есть прозрачные поля — подправь это число.
+@export var door_offset_px: Vector2 = Vector2(-20.0, 0.0)
 
 @export_group("Активация")
 ## Размер зоны активации (узел ActivationZone) в пикселях: герой вошёл — спавн пошёл.
@@ -135,9 +164,14 @@ var _twitch_flip: float = 1.0
 # ============================================================================
 func _ready() -> void:
 	_hp = max_hp
+	# Размер считаем в конце кадра: узел Player в main.tscn стоит ПОСЛЕ башни, поэтому в этот
+	# момент Visual героя ещё носит число из сцены — к концу кадра Player._ready уже выставил
+	# свой масштаб арта (art_scale × player_scale), и башня берёт его у живого героя.
+	_apply_size.call_deferred()         # заглушка, коллизия и дверь — по единому масштабу арта
 	_visual_base = visual.position
 	_apply_activation_size()
 	activation_zone.body_entered.connect(_on_activation_body_entered)
+	_connect_level_controller()
 	# Ввод для тестовой клавиши включаем явно (TODO: убрать вместе с _unhandled_input).
 	set_process_unhandled_input(debug_keys)
 
@@ -174,18 +208,18 @@ func apply_damage(damage: float) -> void:
 		destroy()
 
 
-## Разрушение: спавн останавливаем, коллизию выключаем, заглушку скрываем и объявляем
-## победу. Мобы, которые уже на уровне, остаются и продолжают бежать.
+## Разрушение: спавн останавливаем, коллизию выключаем, заглушку скрываем и подаём сигнал
+## destroyed. Победу объявляет LevelController (он подписан на этот сигнал по группе
+## "level_controller"), а мобы, которые уже на уровне, остаются и продолжают бежать.
 ## TODO: анимация разрушения и кирпичи (Debris) — отдельной задачей.
 func destroy() -> void:
 	if _destroyed:
 		return
 	_destroyed = true
-	_spawning = false
-	_pack_left = 0
+	stop_spawning()
 	body_shape.set_deferred("disabled", true)   # камни и всё прочее теперь пролетают сквозь башню
 	activation_zone.set_deferred("monitoring", false)
-	print("Башня разрушена. Победа!")
+	print("Башня разрушена.")
 	visual.visible = false
 	destroyed.emit()
 
@@ -244,6 +278,14 @@ func _tick_spawn(delta: float) -> void:
 	if _interval_timer > 0.0:
 		return
 	_start_pack()
+
+
+## Остановить спавн пачек: уровень проигран (LevelController.fail зовёт это), башня разрушена
+## (destroy) или погиб герой. Уже выпущенные мобы остаются на уровне — просто добегают.
+## Повторный вызов безвреден.
+func stop_spawning() -> void:
+	_spawning = false
+	_pack_left = 0
 
 
 ## Собрать новую пачку: сколько мобов, и сразу выпустить первого.
@@ -316,6 +358,22 @@ func _on_activation_body_entered(body: Node2D) -> void:
 	_connect_player()
 
 
+## Размер башни по единому масштабу арта (ArtScale, docs/SETUP.md раздел 16): заглушка получает
+## масштаб k, а коллизия и дверь — готовые мировые числа от размера исходного рисунка
+## NATIVE_SIZE. Заглушка Visual нарисована в пикселях исходного рисунка, её низ — в начале
+## координат, поэтому вся её геометрия — это один масштаб k. Корень масштабировать нельзя
+## (физика), поэтому форма и центр считаются в мировых пикселях.
+func _apply_size() -> void:
+	var k := ArtScale.scale_of(native_mult, size_mult)
+	visual.scale = Vector2(k, k)
+	var rect := RectangleShape2D.new()
+	rect.size = NATIVE_SIZE * k
+	body_shape.shape = rect
+	body_shape.position = Vector2(0.0, -NATIVE_SIZE.y * k * 0.5)
+	# Дверь — у нижнего левого угла рисунка: низ картинки = низ башни (y = 0), плюс отступ.
+	spawn_door.position = Vector2(-NATIVE_SIZE.x * k * 0.5, 0.0) + door_offset_px * k
+
+
 ## Размер зоны активации из инспектора: форма строится в коде, чтобы крутить её числом,
 ## а сам узел ActivationZone в сцене двигать руками.
 func _apply_activation_size() -> void:
@@ -349,7 +407,7 @@ func _connect_player() -> void:
 func _on_player_died(_hero: Node) -> void:
 	if not _spawning:
 		return
-	_spawning = false
+	stop_spawning()
 	print("Башня: герой погиб — спавн остановлен")
 
 
@@ -368,6 +426,19 @@ func _resolve_spawner() -> MobSpawner:
 	spawner = found
 	push_warning("Tower: поле Spawner пусто — беру MobSpawner из группы mob_spawner. Надёжнее задать поле в инспекторе.")
 	return found
+
+
+## Подписка на контроллер уровня: по нашему сигналу destroyed он объявляет победу (LevelController.win).
+## Контроллера в сцене нет (или у него нет win) — предупреждение и всё, башня работает как обычно.
+func _connect_level_controller() -> void:
+	var controller := get_tree().get_first_node_in_group(LEVEL_CONTROLLER_GROUP)
+	if controller == null:
+		push_warning("Tower: в сцене нет LevelController (группа \"level_controller\") — о разрушении башни никто не узнает.")
+		return
+	if not controller.has_method(&"win"):
+		push_warning("Tower: у узла из группы level_controller нет метода win — победа по разрушению не сработает.")
+		return
+	destroyed.connect(controller.win)
 
 
 # ============================================================================

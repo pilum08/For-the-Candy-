@@ -151,11 +151,14 @@ func setup(scale_value: float, look: int, impulse: Vector2) -> void:
 ## Взяли в руки: труп «замерзает» и переезжает в CarryPoint носильщика, то есть едет
 ## за ним сам. Слои в руках ГАСИМ (0/0): враги и снаряды труп в руках не замечают,
 ## да и упасть он не может — физика выключена (freeze).
-## scale_mult — размер в руках относительно обычного (Player.carried_scale_mult).
-func pickup(carrier: Node, scale_mult: float = 1.0) -> void:
+## scale_mult — размер в руках относительно обычного: -1 (по умолчанию) — взять у носильщика
+## (Player.carried_scale_mult, см. свойство carried_scale_mult ниже). Так зовёт Player.
+func pickup(carrier: Node, scale_mult: float = -1.0) -> void:
 	if _carrier != null or carrier == null:
 		return
 	_carrier = carrier
+	if scale_mult < 0.0:
+		scale_mult = carried_scale_mult   # настройка носильщика: Player.carried_scale_mult
 	_home_parent = get_parent()
 	_saved_layer = collision_layer
 	_saved_mask = collision_mask
@@ -201,7 +204,9 @@ func pickup(carrier: Node, scale_mult: float = 1.0) -> void:
 
 
 ## Опустили перед собой (E второй раз): возврат слоёв и физики плюс лёгкий толчок вперёд.
-func put_down(at: Vector2, impulse: Vector2) -> void:
+## impulse оставлен для старых вызовов; интерфейс группы "carryables" зовёт put_down(at) —
+## тогда толчка нет («положить» без броска, как и было у Player).
+func put_down(at: Vector2, impulse: Vector2 = Vector2.ZERO) -> void:
 	if _carrier == null:
 		return
 	restore_physics()
@@ -220,6 +225,88 @@ func launch(dir: Vector2, speed: float) -> void:
 	linear_velocity = dir.normalized() * speed
 	if throw_spin > 0.0:
 		angular_velocity = randf_range(-throw_spin, throw_spin)
+
+
+# ============================================================================
+# ИНТЕРФЕЙС ГРУППЫ "carryables" (так с предметами в руках работает Player)
+# Ровно те же подбор / бросок / «положить», что и выше: use_action — это старый бросок по ЛКМ,
+# put_down — старое «положить» по E. Механика не менялась, добавлены только входные точки.
+# ============================================================================
+## Запасные числа броска: те же, что стоят в Player по умолчанию (если носильщик их не отдал).
+const DEFAULT_THROW_SPEED_MIN := 450.0
+const DEFAULT_THROW_SPEED_MAX := 1200.0
+const DEFAULT_THROW_FULL_DISTANCE := 500.0
+
+## Смещение гнезда предмета, когда он в руках, в МИРОВЫХ пикселях: x — вперёд по взгляду.
+## У трупа своих чисел нет: сдвиг живёт в инспекторе ГЕРОЯ (Player.carry_offset_x/y, пиксели
+## арта), поэтому труп отдаёт их носильщику как есть — с переводом в мировые пиксели.
+var carry_offset: Vector2:
+	get:
+		var ox: Variant = _carrier_prop(&"carry_offset_x")
+		var oy: Variant = _carrier_prop(&"carry_offset_y")
+		if ox == null or oy == null:
+			return Vector2.ZERO
+		return Vector2(float(ox), float(oy)) * _carrier_art_scale()
+
+
+## Размер трупа в руках относительно обычного: у трупа это Player.carried_scale_mult.
+var carried_scale_mult: float:
+	get:
+		var value: Variant = _carrier_prop(&"carried_scale_mult")
+		return 1.0 if value == null else float(value)
+
+
+## Множитель скорости ходьбы носильщика, пока труп в руках: Player.carry_speed_mult.
+var carry_speed_mult: float:
+	get:
+		var value: Variant = _carrier_prop(&"carry_speed_mult")
+		return 1.0 if value == null else float(value)
+
+
+## ЛКМ с трупом в руках: бросок в сторону точки прицела. Это тот же бросок, что делал
+## Player._use_item: направление — от гнезда к курсору, скорость растёт с расстоянием.
+## Числа броска труп берёт у носильщика (Player.throw_speed_min/max, throw_full_distance),
+## чтобы ручки в инспекторе героя продолжали работать; нет их — значения по умолчанию.
+## Летит труп через существующий launch(): сама механика полёта не менялась.
+func use_action(aim_point: Vector2) -> void:
+	if _carrier == null:
+		return
+	var to_aim := aim_point - global_position
+	var direction := Vector2.RIGHT
+	var distance := to_aim.length()
+	if distance >= 1.0:
+		direction = to_aim / distance
+	var full := maxf(_carrier_float(&"throw_full_distance", DEFAULT_THROW_FULL_DISTANCE), 1.0)
+	var t := clampf(distance / full, 0.0, 1.0)
+	launch(direction, lerpf(
+		_carrier_float(&"throw_speed_min", DEFAULT_THROW_SPEED_MIN),
+		_carrier_float(&"throw_speed_max", DEFAULT_THROW_SPEED_MAX),
+		t
+	))
+
+
+## Свойство носильщика по имени (null — носильщика нет или свойства у него нет): так труп берёт
+## настройки переноски и броска у того, кто его несёт (у героя они лежат в Player).
+func _carrier_prop(prop: StringName) -> Variant:
+	if _carrier == null or not is_instance_valid(_carrier):
+		return null
+	return _carrier.get(prop)
+
+
+## Числовая настройка носильщика с запасным значением.
+func _carrier_float(prop: StringName, fallback: float) -> float:
+	var value: Variant = _carrier_prop(prop)
+	return fallback if value == null else float(value)
+
+
+## Масштаб арта носильщика (у героя art_scale × player_scale): числа carry_offset_x/y заданы в
+## пикселях арта, а интерфейс carryables — в мировых пикселях.
+func _carrier_art_scale() -> float:
+	var art: Variant = _carrier_prop(&"art_scale")
+	var player_size: Variant = _carrier_prop(&"player_scale")
+	if art == null or player_size == null:
+		return 1.0
+	return maxf(float(art), 0.01) * maxf(float(player_size), 0.01)
 
 
 ## Запомнить отрисовку «как в сцене»: относительность z и «рисоваться за родителем».

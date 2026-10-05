@@ -23,6 +23,10 @@ extends CharacterBody2D
 # ============================================================================
 const MobVisual := preload("res://MobVisual.gd")     # визуал: собирает дерево по паспорту
 const MobRigData := preload("res://MobRigData.gd")   # тип паспорта (нужен только для типов)
+const MobDeathBurst := preload("res://MobDeathBurst.gd")   # разлёт частей, когда труп не положен
+## Группа контроллера уровня (main.tscn) — у него спрашиваем лимит трупов (см. _die).
+const LEVEL_CONTROLLER_GROUP: StringName = &"level_controller"
+
 
 ## Коллайдер (прямоугольник по всему силуэту: торс + штаны + ноги + голова) — в пикселях арта.
 const COLLIDER_SIZE := Vector2(541.0, 726.0)
@@ -211,13 +215,43 @@ func _die() -> void:
 		return
 	_state = State.DEAD
 	died.emit(self)
-	if corpse_scene != null:
-		var corpse := corpse_scene.instantiate()
-		get_tree().current_scene.add_child(corpse)
-		corpse.global_position = global_position
-		if corpse.has_method("setup"):
-			corpse.call("setup", visual.art_scale(), _look, _knock_velocity)
+	# Труп не положен — моб разлетается на части (MobDeathBurst.gd) в двух случаях, по порядку:
+	#   1) какая-то яма уже заполнена целиком и выпал шанс decay_chance_when_pit_full;
+	#   2) место под труп исчерпано (лимит LevelController.can_spawn_corpse()).
+	# Иначе — обычный труп. Контроллера в сцене нет — труп как раньше.
+	var controller := get_tree().get_first_node_in_group(LEVEL_CONTROLLER_GROUP) as LevelController
+	var decay := false
+	if controller != null:
+		if controller.is_any_pit_full() and randf() < controller.decay_chance_when_pit_full:
+			decay = true
+		elif not controller.can_spawn_corpse():
+			decay = true
+	if decay:
+		_burst_parts()
+	else:
+		_spawn_corpse()
 	queue_free()
+
+
+## Труп моба: corpse_scene создаётся в мире и получает вид, взгляд и откат от попадания.
+## corpse_scene пусто — враг просто исчезает (как раньше).
+func _spawn_corpse() -> void:
+	if corpse_scene == null:
+		return
+	var corpse := corpse_scene.instantiate()
+	get_tree().current_scene.add_child(corpse)
+	corpse.global_position = global_position
+	if corpse.has_method("setup"):
+		corpse.call("setup", visual.art_scale(), _look, _knock_velocity)
+
+
+## Вместо трупа (лимит исчерпан): моб разлетается на части (MobDeathBurst.gd). Узел живёт
+## дочерним у врага и уходит вместе с ним; обломки кладутся в мир и гаснут, уехав за экран.
+func _burst_parts() -> void:
+	var burst := MobDeathBurst.new() as Node2D
+	burst.name = "MobDeathBurst"
+	add_child(burst)
+	burst.call(&"burst", rig(), global_position, visual.art_scale(), _look)
 
 
 # ============================================================================

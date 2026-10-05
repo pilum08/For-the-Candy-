@@ -9,7 +9,7 @@ size = Vector2(680, 40)
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_pit_spikes"]
 size = Vector2(680, 30)
 
-[node name="Pit" type="Node2D"]
+[node name="Pit" type="Node2D" groups=["pits"]]
 script = ExtResource("1_pit")
 
 [node name="Bottom" type="StaticBody2D" parent="."]

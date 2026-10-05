@@ -1,0 +1,37 @@
+[gd_scene format=3 uid="uid://cl88vmwdq5s11"]
+
+[ext_resource type="Script" uid="uid://741tp3hpa3n6" path="res://Cannon.gd" id="1_cannon"]
+[ext_resource type="Texture2D" uid="uid://clykjeublro0y" path="res://Sprites/cannon.png" id="2_sprite"]
+[ext_resource type="PackedScene" path="res://Projectile.tscn" id="3_ball_scene"]
+[ext_resource type="Resource" path="res://cannonball.tres" id="4_ball_data"]
+[ext_resource type="Texture2D" uid="uid://bp3g5gti0vbal" path="res://Sprites/cannon_broken.png" id="5_broken"]
+[ext_resource type="PackedScene" path="res://CannonFire.tscn" id="6_fire_scene"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_cannon"]
+size = Vector2(133, 71)
+
+[node name="Cannon" type="RigidBody2D" unique_id=618139021 groups=["carryables"]]
+collision_layer = 128
+collision_mask = 4
+linear_damp = 1.0
+angular_damp = 4.0
+script = ExtResource("1_cannon")
+ball_scene = ExtResource("3_ball_scene")
+ball_data = ExtResource("4_ball_data")
+broken_texture = ExtResource("5_broken")
+fire_scene = ExtResource("6_fire_scene")
+
+[node name="Collider" type="CollisionShape2D" parent="." unique_id=1120997556]
+position = Vector2(-0.5, -35.5)
+shape = SubResource("RectangleShape2D_cannon")
+
+[node name="Body" type="Node2D" parent="." unique_id=1500713114]
+scale = Vector2(0.21, 0.21)
+
+[node name="Sprite" type="Sprite2D" parent="Body" unique_id=2039740970]
+texture_filter = 1
+texture = ExtResource("2_sprite")
+offset = Vector2(0, -168.5)
+
+[node name="Muzzle" type="Marker2D" parent="Body" unique_id=1599338771]
+position = Vector2(264.6, -202.2)

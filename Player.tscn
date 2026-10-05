@@ -30,7 +30,7 @@ shape = SubResource("RectangleShape2D_cgsek")
 
 [node name="PickupZone" type="Area2D" parent="."]
 collision_layer = 0
-collision_mask = 16
+collision_mask = 144
 monitorable = false
 
 [node name="Shape" type="CollisionShape2D" parent="PickupZone"]

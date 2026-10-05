@@ -16,8 +16,10 @@ extends CharacterBody2D
 # Порядок частей = порядок отрисовки (он же порядок узлов в Player.tscn).
 # ============================================================================
 const Rig := preload("res://Rig.gd")   # механизм сборки: расставляет части по таблице RIG
-const CorpseScript := preload("res://Corpse.gd")   # тип трупа: pickup/put_down/launch проверяет парсер
 const DeathBurst := preload("res://DeathBurst.gd")   # разлёт частей на обломки (см. die)
+## Группа предметов, которые герой берёт в руки (трупы Corpse.tscn, пушка Cannon.tscn).
+## Предмет обязан уметь pickup / put_down / use_action — см. _nearest_carryable.
+const CARRYABLE_GROUP: StringName = &"carryables"
 const RIG: Dictionary = {
 	"LegL": {
 		"node": "Visual/LegL", "sprite": "Visual/LegL/Sprite",
@@ -195,12 +197,14 @@ const AIR_DOWN_POSE: Dictionary = {
 ## Сколько держать «лицо выстрела».
 @export var shoot_face_time: float = 0.18
 
-@export_group("Труп: подбор и бросок")
+@export_group("Предметы: подбор, переноска, действие")
 ## Радиус зоны подбора PickupZone — в пикселях арта (как коллайдер, умножается на
-## art_scale * player_scale). Внутри неё E берёт ближайший труп из группы "corpses".
+## art_scale * player_scale). Внутри неё E берёт ближайший предмет из группы "carryables"
+## (трупы и пушка): что предмет умеет — решает он сам (интерфейс pickup/put_down/use_action).
 @export var pickup_radius: float = 900.0
-## Доп. сдвиг гнезда трупа от позиции из Player.tscn (пиксели торса): x — вперёд
-## по взгляду, y — вниз. Базовое место смотри в сцене (Visual/Body/CarryPoint).
+## Доп. сдвиг гнезда от позиции из Player.tscn (пиксели торса): x — вперёд по взгляду, y — вниз.
+## Базовое место смотри в сцене (Visual/Body/CarryPoint). Эти два числа работают, когда в руках
+## ТРУП: у остальных предметов сдвиг свой — свойство carry_offset самого предмета (мировые пиксели).
 @export var carry_offset_x: float = 0.0
 @export var carry_offset_y: float = 0.0
 ## Размер трупа в руках относительно его обычного размера (1 = как лежал на земле).
@@ -210,7 +214,8 @@ const AIR_DOWN_POSE: Dictionary = {
 ## кисти оказались у боков трупа при дефолтных carry_offset_*.
 @export var carry_arm_angle_front: float = 69.0
 @export var carry_arm_angle_back: float = 176.0
-## Множитель скорости ходьбы, пока труп в руках.
+## Множитель скорости ходьбы, пока в руках труп. Другие предметы задают множитель сами
+## (свойство carry_speed_mult предмета — у пушки это Cannon.carry_speed_mult).
 @export_range(0.05, 1.0, 0.05) var carry_speed_mult: float = 0.7
 ## Куда встаёт труп, когда его кладут (E): x — вперёд по взгляду, y — вниз (пиксели арта).
 ## Точку по земле уточняет луч вниз (см. _ground_point) — труп не встанет в пол или стену.
@@ -276,9 +281,10 @@ var _carry_base := Vector2.ZERO
 ## Руки заняты трупом: публичный флаг «несу». Ставится и сбрасывается сам — сеттером
 ## _carried ниже, поэтому отдельно его править не надо (его читает can_shoot).
 var is_carrying: bool = false
-## Труп в руках (null — руки пусты). Нести можно ровно один, см. _interact.
+## Предмет в руках (null — руки пусты): труп или пушка — любой из группы "carryables".
+## Нести можно ровно один, см. _interact.
 ## Сеттер держит is_carrying в согласии с руками: где бы _carried ни меняли, флаг верен.
-var _carried: CorpseScript = null:
+var _carried: Node = null:
 	set(value):
 		_carried = value
 		is_carrying = value != null
@@ -333,8 +339,11 @@ func _move(delta: float) -> void:
 	if not is_on_floor():
 		velocity.y = minf(velocity.y + gravity * k * delta, max_fall_speed * k)
 
-	# С трупом в руках герой идёт медленнее (см. carry_speed_mult).
-	var carry_mult := carry_speed_mult if _carried != null else 1.0
+	# С предметом в руках герой идёт медленнее: множитель задаёт сам предмет (группа carryables),
+	# у трупа это Player.carry_speed_mult.
+	var carry_mult := 1.0
+	if _carried != null:
+		carry_mult = float(_item_value(&"carry_speed_mult", carry_speed_mult))
 	var dir := Input.get_axis("move_left", "move_right")
 	if absf(dir) > 0.01:
 		velocity.x = move_toward(velocity.x, dir * speed * k * carry_mult, acceleration * k * delta)
@@ -402,11 +411,12 @@ func _tick_combat(delta: float) -> void:
 	if Input.is_action_just_pressed("interact"):
 		_interact()
 	if _carried != null:
-		# Труп в руках: ЛКМ бросает, а стрелять в этот момент нельзя (см. can_shoot).
+		# Предмет в руках: ЛКМ — его действие (у трупа это бросок, у пушки пока заглушка), а
+		# стрелять в этот момент нельзя (см. can_shoot).
 		if Input.is_action_just_pressed("shoot"):
-			_throw_corpse()
-			# Это нажатие ЛКМ «съедено» броском: палец ещё на кнопке, но снаряда после
-			# броска не будет — только после отпускания и нового нажатия (см. _shoot_consumed).
+			_use_item()
+			# Это нажатие ЛКМ «съедено»: палец ещё на кнопке, но снаряда после броска
+			# не будет — только после отпускания и нового нажатия (см. _shoot_consumed).
 			_shoot_consumed = true
 		return
 	if Input.is_action_pressed("shoot") and not _shoot_consumed:
@@ -414,7 +424,7 @@ func _tick_combat(delta: float) -> void:
 
 
 ## Можно ли сейчас выстрелить. Снаряд создаётся ровно в одном месте — _shoot(), и он зовёт
-## это первой строкой. Запреты: руки заняты трупом, герой мёртв, идёт кулдаун между выстрелами.
+## это первой строкой. Запреты: руки заняты предметом, герой мёртв, идёт кулдаун между выстрелами.
 func can_shoot() -> bool:
 	if is_carrying or is_dead:
 		return false
@@ -446,59 +456,77 @@ func _shoot() -> void:
 
 
 # ============================================================================
-# ТРУП: ПОДБОР (E) И БРОСОК (ЛКМ)
+# ПРЕДМЕТЫ: ПОДБОР (E) И ДЕЙСТВИЕ (ЛКМ)
 # ============================================================================
-## E: руки пусты — берём ближайший труп из PickupZone; руки заняты — кладём его на землю.
-## Одно нажатие делает ровно одно действие: короткая пауза interact_cooldown мешает подбору и
-## «положить» сработать от одного нажатия. В воздухе (в падении) E не кладёт — ждём приземления.
+## E: руки пусты — берём ближайший предмет из PickupZone (группа "carryables"); руки заняты —
+## кладём его на землю. Одно нажатие делает ровно одно действие: короткая пауза
+## interact_cooldown мешает подбору и «положить» сработать от одного нажатия.
+## В воздухе (в падении) E не кладёт — ждём приземления.
 func _interact() -> void:
 	if _interact_timer > 0.0:
 		return
 	if _carried != null and not is_instance_valid(_carried):
-		_carried = null   # труп исчез из мира — руки снова пусты
+		_carried = null   # предмет исчез из мира — руки снова пусты
 		restore_z()       # и порядок рук тоже: вернуть его тут больше негде
 	if _carried != null:
 		if not is_on_floor():
-			return        # в падении не кладём: иначе труп встанет в воздухе или в стене
-		_drop_corpse()
+			return        # в падении не кладём: иначе предмет встанет в воздухе или в стене
+		_put_down_item()
 		_interact_timer = interact_cooldown
 		return
-	var corpse := _nearest_corpse()
-	if corpse != null:
-		_carried = corpse
-		corpse.pickup(self, carried_scale_mult)
+	var item := _nearest_carryable()
+	if item != null:
+		_carried = item
+		item.call(&"pickup", self)   # предмет сам знает, как встать в гнездо (интерфейс carryables)
 		save_z()        # порядок рук «как было» — вернуть его сможет restore_z
-		raise_arm_z()   # и кисти над трупом, пока is_carrying = true
+		raise_arm_z()   # и кисти над предметом, пока is_carrying = true
 		_interact_timer = interact_cooldown
 
 
-## Ближайший труп из группы "corpses", попавший в PickupZone (её форму см. _apply_art_scale).
-func _nearest_corpse() -> CorpseScript:
-	var best: CorpseScript = null
+## Ближайший предмет из группы "carryables", попавший в PickupZone (её форму см. _apply_art_scale).
+## Сейчас это трупы (Corpse.tscn) и пушка (Cannon.tscn) — что предмет умеет, решает он сам.
+func _nearest_carryable() -> Node:
+	var best: Node = null
 	var best_distance := INF
 	for body in pickup_zone.get_overlapping_bodies():
-		var corpse := body as CorpseScript
-		if corpse == null:
+		if not body.is_in_group(CARRYABLE_GROUP) or not _is_carryable(body):
 			continue
-		var distance := corpse.global_position.distance_to(pickup_zone.global_position)
+		var distance := (body as Node2D).global_position.distance_to(pickup_zone.global_position)
 		if distance < best_distance:
 			best_distance = distance
-			best = corpse
+			best = body
 	return best
 
 
-## Кладём труп на землю перед собой (E): без броска — нулевая скорость, без вращения.
-## Точку по земле уточняем лучом вниз (см. _ground_point): труп не встанет в пол или стену.
-func _drop_corpse() -> void:
-	var corpse := _carried
+## Полный ли это предмет: умеет ли он то, что зовёт Player (интерфейс группы "carryables").
+## Так чужая нода, случайно попавшая в группу, просто не берётся в руки — без ошибок в консоли.
+func _is_carryable(body: Node) -> bool:
+	return body.has_method(&"pickup") and body.has_method(&"put_down") and body.has_method(&"use_action")
+
+
+## Свойство предмета в руках с запасным значением: настройки переноски и броска отдаёт сам
+## предмет (у трупа они лежат в Player, пушка держит свои). Нет свойства — берём запасное.
+func _item_value(prop: StringName, fallback: Variant) -> Variant:
+	if _carried == null or not is_instance_valid(_carried):
+		return fallback
+	var value: Variant = _carried.get(prop)
+	return fallback if value == null else value
+
+
+## Кладём предмет на землю перед собой (E): без броска — нулевая скорость, без вращения.
+## Точку по земле уточняем лучом вниз (см. _ground_point): предмет не встанет в пол или стену.
+## Кладёт предмет сам (put_down, интерфейс carryables): у трупа это его «положить», у пушки —
+## возврат слоёв и физики на землю.
+func _put_down_item() -> void:
+	var item := _carried
 	_carried = null        # руки пусты: с этого момента подъём кистей запрещён
-	restore_z(corpse)      # один возврат: руки из снимка + труп по своему corpse_world_z
-	if corpse == null:
+	restore_z(item)        # один возврат: руки из снимка + предмет по своему сохранённому z
+	if item == null:
 		return
 	var s := maxf(art_scale, 0.01) * maxf(player_scale, 0.01)
-	# Начало координат трупа — его низ, поэтому точка впереди стоп кладёт его на землю.
+	# Начало координат предмета — его низ, поэтому точка впереди стоп кладёт его на землю.
 	var at := global_position + Vector2(drop_offset.x * float(_facing) * s, drop_offset.y * s)
-	corpse.put_down(_ground_point(at, s), Vector2.ZERO)
+	item.call(&"put_down", _ground_point(at, s))
 
 
 ## Геометрия луча «положить» (пиксели арта): слой 3 «земля и стены» = бит 4, а начало и конец
@@ -523,22 +551,27 @@ func _ground_point(point: Vector2, s: float) -> Vector2:
 	return hit["position"] as Vector2
 
 
-## Бросок по дуге в сторону курсора: рука дёргается назад (как отдача), дальше труп летит сам.
-func _throw_corpse() -> void:
-	var corpse := _carried
-	_carried = null        # руки пусты: с этого момента подъём кистей запрещён
-	restore_z(corpse)      # один возврат: руки из снимка + труп по своему corpse_world_z
-	if corpse == null:
+## ЛКМ с предметом в руках: действует сам предмет (use_action, интерфейс carryables) — у трупа
+## это бросок по дуге в сторону курсора, у пушки — выстрел ядром, после которого она ломается и
+## сама уезжает из гнезда (Cannon._break_free). Руки при этом пустеют, а рука дёргается назад
+## (отдача): дальше предмет живёт сам, как и раньше после броска трупа.
+## Если предмет после use_action ОСТАЛСЯ в гнезде (use_action у него ничего не сдвигает), руки не
+## пустеют — иначе предмет повис бы на герое, но забытым (его не поднять и не положить, а Player
+## считал бы руки свободными).
+func _use_item() -> void:
+	var item := _carried
+	if item != null and not is_instance_valid(item):
+		_carried = null
+		restore_z()
+		return
+	if item == null:
 		return
 	_recoil_timer = recoil_time   # рывок передней руки, без плавности (см. _recoil_angle)
-	var from := carry_point.global_position
-	var to_mouse := get_global_mouse_position() - from
-	var direction := Vector2(float(_facing), 0.0)
-	if to_mouse.length_squared() >= 1.0:
-		direction = to_mouse.normalized()
-	# Чем дальше курсор, тем сильнее бросок: от throw_speed_min до throw_speed_max.
-	var t := clampf(to_mouse.length() / maxf(throw_full_distance, 1.0), 0.0, 1.0)
-	corpse.launch(direction, lerpf(throw_speed_min, throw_speed_max, t))
+	item.call(&"use_action", get_global_mouse_position())
+	if is_instance_valid(item) and item.get_parent() == carry_point:
+		return                    # предмет остался в руках — руки заняты, как и были
+	_carried = null        # руки пусты: с этого момента подъём кистей запрещён
+	restore_z(item)        # один возврат: руки из снимка + предмет по своему сохранённому z
 
 
 # ============================================================================
@@ -588,13 +621,14 @@ func raise_arm_z() -> void:
 	arm_back.z_as_relative = true
 
 
-## ЕДИНСТВЕННЫЙ возврат порядка отрисовки — руки и труп одним вызовом. Труп возвращает свой
-## мировой z сам (Corpse.restore_z: явное corpse_world_z), но зовём его отсюда, чтобы у
-## опускания, броска и смерти был ровно один и тот же путь. Без снимка рук ничего не делаем —
-## возвращать нечего.
-func restore_z(corpse: CorpseScript = null) -> void:
-	if corpse != null and is_instance_valid(corpse):
-		corpse.restore_z()
+## ЕДИНСТВЕННЫЙ возврат порядка отрисовки — руки и предмет одним вызовом. Предмет возвращает свой
+## мировой z сам (Corpse.restore_z: явное corpse_world_z; Cannon — свой сохранённый), но зовём его
+## отсюда, чтобы у опускания, броска и смерти был ровно один и тот же путь. Без снимка рук ничего
+## не делаем — возвращать нечего.
+func restore_z(item: Node = null) -> void:
+	# Метод restore_z есть у трупа (Corpse.gd); у предмета без него z трогать нечем — пропускаем.
+	if item != null and is_instance_valid(item) and item.has_method(&"restore_z"):
+		item.call(&"restore_z")
 	if not _arm_order_saved:
 		return
 	arm_front.visible = _arm_front_visible
@@ -663,7 +697,7 @@ func _apply_pose(p: Dictionary) -> void:
 	leg_r.position = _attach("LegR") + (p["leg_r_pos"] as Vector2)
 	leg_r.rotation = deg_to_rad(p["leg_r_rot"] as float)
 
-	# В руках труп: задняя рука тоже замирает в позе «держу», без дёргания с ходьбой.
+	# В руках предмет: задняя рука тоже замирает в позе «держу», без дёргания с ходьбой.
 	if _carried != null:
 		arm_back.rotation = deg_to_rad(carry_arm_angle_back)
 	else:
@@ -695,14 +729,14 @@ func die() -> void:
 	is_dead = true
 	# --- 1. Мгновенно: герой больше не действует, и его больше никто не видит -----------
 	velocity = Vector2.ZERO
-	# Руки разжимаются насовсем: _drop_corpse() уже вернул и труп, и кисти; вызов ниже — на случай
-	# смерти с пустыми руками (без снимка он молчит) и он же явно показывает скрытую переднюю руку:
-	# дальше выключается _process, и поставить порядок рук больше некому.
+	# Руки разжимаются насовсем: _put_down_item() уже вернул и предмет, и кисти; вызов ниже — на
+	# случай смерти с пустыми руками (без снимка он молчит) и он же явно показывает скрытую
+	# переднюю руку: дальше выключается _process, и поставить порядок рук больше некому.
 	if _carried != null:
-		_drop_corpse()
+		_put_down_item()
 	restore_z()
 	_apply_art_scale()
-	set_physics_process(false)   # движение, стрельба (ЛКМ) и бросок трупа (E) выключены
+	set_physics_process(false)   # движение, стрельба (ЛКМ) и подбор/действие предметов выключены
 	set_process(false)           # ввод/прицел/анимация выключены
 	# Враги ищут цель по группе player (Enemy.target_group): без группы они останавливаются,
 	# а снятый слой коллизии закрывает их HitBox — стоящий герой для них больше не «касание».
@@ -776,9 +810,16 @@ func _motion_scale() -> float:
 func _apply_art_scale() -> void:
 	var s := maxf(art_scale, 0.01) * maxf(player_scale, 0.01)
 	visual.scale = Vector2(s * float(_facing), s)
-	# Гнездо трупа лежит ВНУТРИ Visual/Body: зеркало и масштаб оно получает от родителя,
-	# поэтому тут только позиция (база из сцены плюс подстройка экспортами).
-	carry_point.position = _carry_base + Vector2(carry_offset_x, carry_offset_y)
+	# Гнездо предмета лежит ВНУТРИ Visual/Body: зеркало и масштаб оно получает от родителя,
+	# поэтому тут только позиция: база из сцены плюс сдвиг. Сдвиг берём у предмета в руках
+	# (carry_offset, мировые пиксели — делим на масштаб героя, чтобы позиция была в пикселях арта,
+	# как координаты гнезда в сцене). Пустые руки и труп (у него своего сдвига нет) — прежние
+	# carry_offset_x/y из инспектора героя.
+	var nest_shift := Vector2(carry_offset_x, carry_offset_y)
+	if _carried != null and is_instance_valid(_carried):
+		var item_shift: Vector2 = _item_value(&"carry_offset", nest_shift)
+		nest_shift = item_shift / maxf(s, 0.0001)
+	carry_point.position = _carry_base + nest_shift
 	# Порядок отрисовки рук тут НЕ трогаем: он меняется только в момент подбора и возврата
 	# трупа (см. save_z / raise_arm_z / restore_z). Выводить его каждый кадр из
 	# _carried нельзя: если руки приподняты, а труп на самом деле лежит на земле, рука
@@ -790,7 +831,7 @@ func _apply_art_scale() -> void:
 	rect.size = COLLIDER_SIZE * s
 	collider.shape = rect
 	collider.position = COLLIDER_OFFSET * s
-	# Зона подбора трупов масштабируется так же, как коллайдер (физика не масштабируется).
+	# Зона подбора предметов масштабируется так же, как коллайдер (физика не масштабируется).
 	var circle := CircleShape2D.new()
 	circle.radius = maxf(pickup_radius * s, 1.0)
 	pickup_shape.shape = circle
