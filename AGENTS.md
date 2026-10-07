@@ -20,10 +20,11 @@
 - `enemy_yellow.tres` — паспорт жёлтого моба
 
 ## Предметы и снаряды
-- `Cannon.gd` — пушка: носится, стреляет ядром, ломается; группа `carryables`. @export: ball_scene, ball_data, carry_offset, fall_fail_depth
+- `Cannon.gd` — пушка: носится, стреляет ядром, ломается и покидает руки ПОСЛЕ анимации выстрела (сигнал CannonFire.animation_finished); группа `carryables`. @export: ball_scene, ball_data, carry_offset, fall_fail_depth
 - `Cannon.tscn` — сцена пушки
-- `CannonFire.gd` — вспышка/дымок из дула в момент выстрела (ставит и масштабирует Cannon). @export: fire_textures, smoke_textures, fire_frame_duration, smoke_frame_duration, smoke_delay
+- `CannonFire.gd` — вспышка/дымок из дула в момент выстрела (ставит и масштабирует Cannon); в конце шлёт `animation_finished` — по нему пушка ломается. @export: fire_textures, smoke_textures, fire_offsets, smoke_offsets, fire_frame_duration, smoke_frame_duration, fire_frame_durations, smoke_frame_durations, smoke_delay, post_animation_delay
 - `CannonFire.tscn` — сцена вспышки (спрайты Fire, Smoke)
+- `Spear.gd` / `Spear.tscn` — копьё-находка за упавшей башней: RigidBody2D, слой 7 «обломки», маска «земля», группа `carryables`; pickup/put_down/use_action — заготовка (подобрать нельзя). @export: native_mult, size_mult, carry_offset, carried_scale_mult, carry_speed_mult
 - `Projectile.gd` — снаряд по дуге: попадание/промах. signals hit_target, hit_tower, missed
 - `Projectile.tscn` — снаряд (Area2D)
 - `ProjectileData.gd` — данные типа снаряда. @export: texture, speed, damage, pierce_enemies, can_damage_tower, report_miss
@@ -33,8 +34,9 @@
 
 ## Уровень
 - `main.tscn` — уровень: Ground, Pit, Fortification, Tower, Player+Camera, Encounter1/2, WaveTrigger, PlayersWall, MobSpawner, WaveManager, LevelController, Cannon
-- `Tower.gd` — башня: спавн из двери, HP, разрушение; группа `tower`; signal destroyed. @export: max_hp, group_size, group_interval, max_alive, activation_size
-- `Tower.tscn` — сцена башни
+- `Tower.gd` — башня: спавн из двери, HP, разрушение (взрыв и копьё после него); группа `tower`; signal destroyed. @export: max_hp, group_size, group_interval, max_alive, activation_size, explosion_scene, spear_scene
+- `Tower.tscn` — сцена башни (Visual/Body = Sprite2D `tower.png`)
+- `TowerExplosion.gd` / `TowerExplosion.tscn` — взрыв башни: 5 кадров, кирпичи `brick*.png`; signals first_frame_shown (Tower гасит корпус после 1-го кадра), explosion_finished. @export: explosion_textures, frame_duration, post_animation_delay, debris_count, debris_stay_count, brick_textures, speed_min, speed_max, spin_max
 - `Pit.gd` — яма из секций. signals section_filled(index), pit_completed. @export: section_count, pit_width, pit_depth; корень в группе `pits`
 - `Pit.tscn` — сцена ямы (Bottom, SpikeZone, Sections)
 - `PitSection.gd` — ячейка ямы: ловит труп, гасит смерть, включает пол; signal filled(index)
@@ -59,7 +61,8 @@
 
 ## Слои столкновений (project.godot)
 1 игрок, 2 враги, 3 земля и стены, 4 снаряды, 5 тела, 6 замороженные тела (не используется),
-7 обломки, 8 предметы, 9 башня. Бит слоя = 2^(номер−1). Маски сцен — docs/SETUP.md, разд. 1.
+7 обломки (обломки смерти, кирпичи башни, копьё-находка), 8 предметы, 9 башня. Бит слоя = 2^(номер−1).
+Маски сцен — docs/SETUP.md, разд. 1.
 
 ## Управление (project.godot → Ввод)
 move_left — A / ←, move_right — D / →, shoot — ЛКМ, interact — E.
@@ -67,6 +70,6 @@ move_left — A / ←, move_right — D / →, shoot — ЛКМ, interact — E.
 
 ## Группы (names)
 player — герой; enemies — враги; mobs — все заспавненные мобы; corpses — трупы; carryables — носимые
-(трупы, пушка); tower — башня; mob_spawner, wave_manager, level_controller — узлы уровня;
+(трупы, пушка, копьё); tower — башня; mob_spawner, wave_manager, level_controller — узлы уровня;
 camera — камера; wave_wall — стена волн; pits — ямы (для расчёта лимита трупов).
 

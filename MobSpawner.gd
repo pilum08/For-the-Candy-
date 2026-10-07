@@ -123,14 +123,24 @@ func spawn_mob(table: SpawnTable = null, at: Vector2 = SPAWN_AT_CAMERA) -> Node2
 		push_warning("MobSpawner: корень сцены моба не Node2D — спавн пропущен.")
 		return null
 	_apply_data(mob, entry)   # паспорт ставим ДО add_child: MobVisual соберётся в своём _ready
+	# Ввод моба в мир откладываем (см. _place_mob): спавн зовут и из сигнала физики
+	# (EncounterTrigger — Area2D.body_entered), а добавлять Area2D моба (его HitBox) в дерево
+	# во время физического опроса (flushing queries) Godot запрещает — «Can't change this state …».
+	_place_mob.call_deferred(mob, cam, at)
+	return mob
+
+
+## Ввести готового моба в мир: посчитать точку появления (от камеры cam либо at), добавить в
+## сцену, поставить, взять на учёт (группа mobs, подписка на died) и объявить (mob_spawned).
+## Зовётся ОТЛОЖЕННО из spawn_mob — см. там про flushing queries.
+func _place_mob(mob: Node2D, cam: Camera2D, at: Vector2) -> void:
 	var parent := get_tree().current_scene
 	if parent == null:
 		parent = get_parent()
 	parent.add_child(mob)
-	mob.global_position = _spawn_point(cam) if from_camera else at
+	mob.global_position = _spawn_point(cam) if cam != null else at
 	_register(mob)
 	mob_spawned.emit(mob)
-	return mob
 
 
 ## Поставить count мобов с паузой interval секунд между ними (interval <= 0 — все сразу).

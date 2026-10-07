@@ -20,7 +20,7 @@
 size = Vector2(530, 120)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_groundR"]
-size = Vector2(2790, 120)
+size = Vector2(2932, 120)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_wave_wall"]
 size = Vector2(120, 2400)
@@ -46,12 +46,12 @@ color = Color(0.82, 0.82, 0.86, 1)
 [node name="VisualRight" type="ColorRect" parent="Ground" unique_id=2061305559]
 offset_left = -790.0
 offset_top = -60.0
-offset_right = 2000.0
+offset_right = 2143.0
 offset_bottom = 60.0
 color = Color(0.82, 0.82, 0.86, 1)
 
 [node name="ShapeRight" type="CollisionShape2D" parent="Ground" unique_id=86759478]
-position = Vector2(605, 0)
+position = Vector2(676, 0)
 shape = SubResource("RectangleShape2D_groundR")
 
 [node name="Pit" parent="." unique_id=513324870 instance=ExtResource("4_pit")]
@@ -76,12 +76,12 @@ text = "Укрепление"
 horizontal_alignment = 1
 
 [node name="Tower" parent="." unique_id=1131248360 instance=ExtResource("13_tower")]
-position = Vector2(1800, 0)
+position = Vector2(1801, 13)
 group_size = 2
 spawner = NodePath("../MobSpawner")
 
 [node name="Player" parent="." unique_id=1694100496 instance=ExtResource("1_efxa6")]
-position = Vector2(0, -140)
+position = Vector2(-653, -234)
 idle_pose_fps = 2.0
 shoot_cooldown = 0.5
 death_hold_time = 0.2

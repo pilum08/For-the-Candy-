@@ -263,9 +263,10 @@ func put_down(world_position: Vector2) -> void:
 # ВЫСТРЕЛ (ЛКМ)
 # ============================================================================
 ## ЛКМ с пушкой в руках: выстрел ядром из дула в сторону курсора. Пушка одноразовая — флаг _used,
-## поэтому второй ЛКМ уже ничего не делает. Порядок важен: сначала выстрел (дуло ещё в руках, точка
-## вылета — как в этот момент), потом слом: вместе со сломом пушка уезжает из CarryPoint, и Player
-## в том же такте возвращает руки за курсором (рывок отдачи Player._use_item ставит сам).
+## поэтому второй ЛКМ уже ничего не делает. Порядок важен: вспышка и ядро — сразу (дуло ещё в руках,
+## точка вылета — как в этот момент), а слом — ТОЛЬКО ПОСЛЕ анимации выстрела: пока CannonFire играет
+## вспышку и дым, пушка остаётся в руках и уезжает из CarryPoint лишь по его сигналу
+## animation_finished (см. _on_fire_finished). Player тогда же в том же такте возвращает руки.
 func use_action(aim_point: Vector2) -> void:
 	if _used or _carrier == null:
 		return
@@ -278,13 +279,24 @@ func use_action(aim_point: Vector2) -> void:
 		to_aim = Vector2.RIGHT if aim_point.x >= from.x else Vector2.LEFT
 	var dir := to_aim.normalized()
 	# Вспышка/дым — в точке дула, пока пушка ещё в руках (со сломом она уедет из CarryPoint).
-	_spawn_fire(dir)
+	var effect := _spawn_fire(dir)
 	_fire(from, dir)
-	_break_free(dir)
-	# Отдача: толчок назад, против выстрела. Строго ПОСЛЕ _break_free — он переписывает
-	# linear_velocity целиком, поэтому импульс, добавленный раньше, был бы затёрт.
-	linear_velocity += -dir * recoil_speed
 	_shake_camera()
+	# Пушка ломается и покидает руки не сразу, а когда отыграет анимация выстрела. Эффекта нет (нет
+	# Fire Scene или у него нет сигнала) — ломаемся сразу, как раньше.
+	if effect != null and effect.has_signal(&"animation_finished"):
+		effect.connect(&"animation_finished", _on_fire_finished.bind(dir))
+	else:
+		_on_fire_finished(dir)
+
+
+## Анимация выстрела отыграна (CannonFire.animation_finished): вот теперь пушка ломается и уезжает из
+## рук. Отдачу берём тоже здесь: _break_free переписывает linear_velocity целиком, поэтому толчок
+## назад добавляется строго после него (иначе был бы затёрт). Эффекта с сигналом нет — сюда приходит
+## сразу из use_action.
+func _on_fire_finished(dir: Vector2) -> void:
+	_break_free(dir)
+	linear_velocity += -dir * recoil_speed
 
 
 ## Ядро: Projectile.tscn (та же баллистика и попадания, что у камня) + cannonball.tres (свои числа
@@ -349,17 +361,20 @@ func _break_free(dir: Vector2) -> void:
 # ЭФФЕКТЫ ВЫСТРЕЛА (вспышка из дула, дым, тряска камеры)
 # ============================================================================
 ## Вспышка из дула: CannonFire.tscn в мировой точке дула. Масштаб — как у пушки (ArtScale), зеркало
-## — по направлению выстрела (dir.x >= 0 — смотрит вправо). Эффект сам себя удалит, когда отыграет.
-func _spawn_fire(dir: Vector2) -> void:
+## — по направлению выстрела (dir.x >= 0 — смотрит вправо). Эффект сам себя удалит, когда отыграет,
+## но сперва пришлёт animation_finished — по нему пушка и ломается (см. use_action). Узел возвращаем,
+## чтобы use_action подписался на сигнал; эффекта нет — null.
+func _spawn_fire(dir: Vector2) -> Node:
 	if fire_scene == null:
-		return
+		return null
 	var effect := fire_scene.instantiate() as Node2D
 	if effect == null:
-		return
+		return null
 	get_tree().current_scene.add_child(effect)
 	effect.global_position = muzzle.global_position
 	if effect.has_method(&"setup"):
-		effect.call(&"setup", ArtScale.scale_of(native_mult, size_mult), dir.x >= 0.0)
+		effect.call(&"setup", ArtScale.scale_of(native_mult, size_mult), dir.x < 0.0)
+	return effect
 
 
 ## Тряска камеры после выстрела: камера уровня — в группе "camera" (CameraFollow.gd). Метода нет

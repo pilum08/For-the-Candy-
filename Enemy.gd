@@ -278,6 +278,15 @@ func _apply_enemy_scale() -> void:
 	if is_equal_approx(_applied_scale, s):
 		return
 	_applied_scale = s
+	# Размеры коллизий меняем ОТЛОЖЕННО (см. _set_collision_size): _ready зовётся при add_child,
+	# а спавн может прийти из сигнала физики — менять состояние физики во время физического
+	# опроса (flushing queries) Godot запрещает.
+	_set_collision_size.call_deferred(s, mirror)
+
+
+## Пересобрать формы коллайдера и HitBox под масштаб арта s (зеркало mirror — по взгляду).
+## Вынесено отдельно, потому что зовётся ОТЛОЖЕННО из _apply_enemy_scale.
+func _set_collision_size(s: float, mirror: float) -> void:
 	var rect := RectangleShape2D.new()
 	rect.size = COLLIDER_SIZE * s
 	collider.shape = rect

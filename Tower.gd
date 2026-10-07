@@ -13,16 +13,17 @@ class_name Tower
 ##   * считает ТОЛЬКО своих мобов: за каждого заспавненного подписывается на его died,
 ##     поэтому мобы засад (EncounterTrigger) и волн в счёт башни не входят;
 ##   * ПОПАДАНИЕ: take_hit() — только рывок, HP не меняется; apply_damage() — снимает HP;
-##   * ЛОМАЕТСЯ: destroy() — спавн стоп, коллизия off, «Башня разрушена.» в консоль и сигнал
-##     destroyed (на него подписан LevelController: он и объявляет «Победа!»). Уже выпущенные
+##   * ЛОМАЕТСЯ: destroy() — спавн стоп, коллизия off, взрыв (explosion_scene), в консоль «Башня
+##     разрушена.» и сигнал destroyed (на него подписан LevelController: он и объявляет «Победа!»),
+##     а по концу взрыва корпус исчезает и за башней встаёт копьё (spear_scene). Уже выпущенные
 ##     мобы остаются на уровне.
 ##
 ## ГДЕ ЖИВЁТ: отдельная сцена Tower.tscn, инстанцируется в уровень (main.tscn) справа, за
 ## всеми триггерами и засадами. Позиция узла — координаты земли уровня.
 ##
 ## РАЗМЕР: башня живёт по ЕДИНОМУ МАСШТАБУ АРТА (ArtScale, docs/SETUP.md раздел 16) — её рисунок
-## нарисован 1:1 вместе с героем, поэтому масштаб берётся у героя: заглушка
-## (Visual.scale), коллизия (Shape) и дверь (SpawnDoor) считаются от размера исходного рисунка
+## нарисован 1:1 вместе с героем, поэтому масштаб берётся у героя: корпус (Visual.scale),
+## коллизия (Shape) и дверь (SpawnDoor) считаются от размера исходного рисунка
 ## NATIVE_SIZE × ArtScale.hero_scale() × native_mult × size_mult — см. _apply_size.
 ## Корень StaticBody2D всегда scale = ONE: масштаб живёт только на Visual, а форма и дверь
 ## получают уже мировые числа.
@@ -31,8 +32,15 @@ class_name Tower
 ## Героя и врагов не блокирует: в их масках (4 = земля) слоя 9 нет. Попадает в башню
 ## только снаряд: в Projectile.tscn в маску добавлен слой 9 (6 → 262).
 ##
-## ЗАГЛУШКА: корпус сейчас — ColorRect с надписью «Башня» (узел Visual). TODO: заменить
-## рисунком; разрушение с анимацией и кирпичами — тоже TODO (см. destroy()).
+## КОРПУС: рисунок Sprites/Construction/tower.png (2728×2554, нарисован 1:1 с героем) — узел
+## Visual/Body (Sprite2D) в пикселях рисунка, низ картинки = низ башни (y = 0). Размер даёт Visual.
+##
+## РАЗРУШЕНИЕ: когда HP кончилось, destroy() глушит спавн, гасит коллизию, поднимает взрыв
+## (explosion_scene → TowerExplosion.tscn: кадры tower_explosion1..5.png и кирпичи brick*.png) и ПОСЛЕ
+## его анимации прячет корпус и ставит за башней копьё (spear_scene → Spear.tscn). Сигнал destroyed
+## шлётся СРАЗУ, а не после анимации: на него завязан исход забега, и «башня уцелела» объявляется в
+## том же кадре, когда исчезло ядро (Cannon._on_ball_gone) — отложенный сигнал обернулся бы
+## поражением уже после победы.
 ##
 ## СВЯЗИ: Spawner (MobSpawner) — поле в инспекторе, пусто — берём узел из группы
 ## "mob_spawner" (в main.tscn спавнер в неё входит) и пишем предупреждение. Герой для
@@ -55,6 +63,12 @@ const FULL_WAIT_STEP := 0.25
 ## По нему считаются заглушка, коллизия и дверь: файл в проекте ровно такого размера, поэтому
 ## native_mult по умолчанию 1.0 (уменьшишь файл — native_mult = эта ширина / ширина файла).
 const NATIVE_SIZE := Vector2(2728.0, 2554.0)
+## Отступ копья от ЦЕНТРА башни после её разрушения, МИРОВЫЕ пиксели: x = +100 — копьё встаёт внутри
+## силуэта башни (её ширина ≈573 px), y = 0 — низ рисунка, то есть уровень пола.
+const SPEAR_OFFSET_PX := Vector2(100.0, 0.0)
+## Толчок копью в момент появления, px/с: x — вправо, y — вверх (минус = вверх). Копьё чуть
+## подбрасывается и падает на землю, прежде чем остаться лежать за башней.
+const SPEAR_IMPULSE := Vector2(50.0, -100.0)
 
 # ============================================================================
 # СИГНАЛЫ
@@ -111,6 +125,13 @@ signal destroyed
 @export_group("Связи")
 ## Спавнер мобов. Пусто — берём узел из группы "mob_spawner".
 @export var spawner: MobSpawner
+
+@export_group("Разрушение")
+## Сцена взрыва (TowerExplosion.tscn): кадры разрушения, кирпичи и сигнал explosion_finished, по
+## которому башня прячет корпус и ставит копьё. Пусто — корпус прячется сразу, без анимации.
+@export var explosion_scene: PackedScene = preload("res://TowerExplosion.tscn")
+## Сцена копья (Spear.tscn) — находка, которая появляется за разрушенной башней. Пусто — копья нет.
+@export var spear_scene: PackedScene = preload("res://Spear.tscn")
 
 @export_group("Тест (временно)")
 ## TODO: временная клавиша F3 — снимает 200 урона через apply_damage(). УБРАТЬ вместе с
@@ -208,10 +229,10 @@ func apply_damage(damage: float) -> void:
 		destroy()
 
 
-## Разрушение: спавн останавливаем, коллизию выключаем, заглушку скрываем и подаём сигнал
-## destroyed. Победу объявляет LevelController (он подписан на этот сигнал по группе
-## "level_controller"), а мобы, которые уже на уровне, остаются и продолжают бежать.
-## TODO: анимация разрушения и кирпичи (Debris) — отдельной задачей.
+## Разрушение: спавн останавливаем, коллизию выключаем, поднимаем взрыв и подаём сигнал destroyed.
+## Победу объявляет LevelController (он подписан на этот сигнал по группе "level_controller"), а мобы,
+## которые уже на уровне, остаются и продолжают бежать. Корпус скрывается и копьё появляется НЕ здесь,
+## а по концу взрыва (см. _on_explosion_finished); сигнал же шлётся сразу — почему, см. шапку файла.
 func destroy() -> void:
 	if _destroyed:
 		return
@@ -220,8 +241,75 @@ func destroy() -> void:
 	body_shape.set_deferred("disabled", true)   # камни и всё прочее теперь пролетают сквозь башню
 	activation_zone.set_deferred("monitoring", false)
 	print("Башня разрушена.")
-	visual.visible = false
+	_start_explosion()
 	destroyed.emit()
+
+
+# ============================================================================
+# ВЗРЫВ И КОПЬЁ (что остаётся после башни)
+# ============================================================================
+## Поднять взрыв: он ставится в ЦЕНТР башни — центр её коллизии, то есть половина высоты рисунка над
+## землёй. По сигналу explosion_finished взрыв отдаёт команду прятать корпус и ставить копьё. Сцены
+## взрыва нет (или он не Node2D / без сигнала) — корпус прячется сразу, без анимации и кирпичей.
+func _start_explosion() -> void:
+	if explosion_scene == null:
+		_on_explosion_finished()
+		return
+	var explosion := explosion_scene.instantiate()
+	if explosion == null:
+		_on_explosion_finished()
+		return
+	_world_parent().add_child(explosion)
+	var node := explosion as Node2D
+	if node != null:
+		node.global_position = global_position + body_shape.position
+	if explosion.has_signal(&"first_frame_shown"):
+		explosion.connect(&"first_frame_shown", _on_first_frame_shown)
+	if explosion.has_signal(&"explosion_finished"):
+		explosion.connect(&"explosion_finished", _on_explosion_finished)
+	else:
+		# Сигнала нет — анимации для нас нет: корпус прячем сразу, взрыв доиграет сам.
+		_on_explosion_finished()
+
+
+## Отыгран первый кадр взрыва: корпус башни исчезает — он виден только под первым кадром, а
+## кадры дальше идут уже без него. Копьё ставим позже, по концу взрыва (см. _on_explosion_finished).
+func _on_first_frame_shown() -> void:
+	visual.visible = false
+
+
+## Взрыв отыграл: корпус башни исчезает, а за башней встаёт копьё — находка после разрушения.
+## visual.visible = false здесь остаётся ради случая «кадров взрыва нет» (first_frame_shown тогда
+## не летит), а в обычном бою корпус уже погашен в _on_first_frame_shown.
+func _on_explosion_finished() -> void:
+	visual.visible = false
+	_spawn_spear()
+
+
+## Копьё: встаёт на землю уровня внутри силуэта башни (SPEAR_OFFSET_PX) и чуть подпрыгивает
+## (SPEAR_IMPULSE). Сцены копья нет — просто ничего не появляется.
+func _spawn_spear() -> void:
+	if spear_scene == null:
+		return
+	var spear := spear_scene.instantiate()
+	if spear == null:
+		return
+	_world_parent().add_child(spear)
+	var node := spear as Node2D
+	if node != null:
+		node.global_position = global_position + SPEAR_OFFSET_PX
+	var body := spear as RigidBody2D
+	if body != null:
+		body.apply_central_impulse(SPEAR_IMPULSE)
+
+
+## Куда класть то, что переживёт башню (взрыв и копьё): в мир — текущую сцену; её нет (башня открыта
+## сама по себе) — рядом с собой.
+func _world_parent() -> Node:
+	var scene := get_tree().current_scene
+	if scene != null:
+		return scene
+	return get_parent()
 
 
 # ============================================================================

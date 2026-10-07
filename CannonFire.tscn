@@ -1,20 +1,27 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene format=3 uid="uid://dhhqq3iybqrt4"]
 
-[ext_resource type="Script" path="res://CannonFire.gd" id="1_fire"]
-[ext_resource type="Texture2D" path="res://Sprites/cannon_fire_01.png" id="2_fire1"]
-[ext_resource type="Texture2D" path="res://Sprites/cannon_fire_02.png" id="3_smoke1"]
-[ext_resource type="Texture2D" path="res://Sprites/cannon_fire_03.png" id="4_smoke2"]
+[ext_resource type="Script" uid="uid://clqr4yd8i02w" path="res://CannonFire.gd" id="1_fire"]
+[ext_resource type="Texture2D" uid="uid://c6ppvavop6o0i" path="res://Sprites/cannon_fire_01.png" id="2_fire1"]
+[ext_resource type="Texture2D" uid="uid://cpvjsy3re5at" path="res://Sprites/cannon_fire_02.png" id="3_smoke1"]
+[ext_resource type="Texture2D" uid="uid://bfdckvjkwqosi" path="res://Sprites/cannon_fire_03.png" id="4_smoke2"]
 
-[node name="CannonFire" type="Node2D"]
+[node name="CannonFire" type="Node2D" unique_id=994950559]
 script = ExtResource("1_fire")
 fire_textures = Array[Texture2D]([ExtResource("2_fire1")])
 smoke_textures = Array[Texture2D]([ExtResource("3_smoke1"), ExtResource("4_smoke2")])
+fire_offsets = Array[Vector2]([Vector2(150, 0)])
+smoke_offsets = Array[Vector2]([Vector2(350, 0), Vector2(450, 0)])
+fire_frame_duration = 0.2
+smoke_frame_duration = 0.2
+fire_frame_durations = Array[float]([0.2])
+smoke_frame_durations = Array[float]([0.2, 0.1])
+post_animation_delay = 0.1
 
-[node name="Fire" type="Sprite2D" parent="."]
+[node name="Fire" type="Sprite2D" parent="." unique_id=1026922122]
 texture_filter = 1
 texture = ExtResource("2_fire1")
 
-[node name="Smoke" type="Sprite2D" parent="."]
+[node name="Smoke" type="Sprite2D" parent="." unique_id=2118075360]
 visible = false
 texture_filter = 1
 texture = ExtResource("3_smoke1")
