@@ -33,7 +33,7 @@ extends Node2D
 ## ничего не подгоняется под ячейку и не обрезается, поэтому картинка может налезть на соседние
 ## секции и торчать над краем ямы или не доставать до уровня пола — это допустимо. Низ силуэта —
 ## на дне ячейки (на bottom_overlap_px выше дна), центр по X — центр ячейки со сдвигом ±x_jitter,
-## поворот — случайное зеркало по X плюс разброс ±tilt_jitter. Появляется рывком: 1–2 кадра
+## зеркало — как смотрел сам труп (его Visual.scale.x), плюс разброс ±tilt_jitter. Появляется рывком: 1–2 кадра
 ## светится белым (modulate > 1), твинов нет. z_index = −1: выше серого визуала шипов и дна ямы
 ## (в Pit.tscn узел SpikeZone идёт до Sections, поэтому при равном z картинка рисуется поверх),
 ## но ниже частей героя (z = 0).
@@ -228,7 +228,7 @@ func _spawn_fill(corpse: RigidBody2D) -> void:
 	var src := corpse.get_node_or_null("Visual/Sprite") as Sprite2D
 	# Обычный масштаб трупа (мировой): у разных мобов разный art_scale, а поднятый и брошенный
 	# труп носит свой масштаб в узле Visual — поэтому спрашиваем у картинки трупа, а не у Pit.
-	# Зеркало в масштаб не попадает: global_scale знака не хранит, а зеркало мы выбираем сами.
+	# Зеркало в масштаб не попадает: global_scale знака не хранит, а зеркало берём ниже — у самого трупа.
 	var art_scale := 1.0
 	if src != null:
 		art_scale = maxf(absf(src.global_scale.y), 0.001)
@@ -240,9 +240,14 @@ func _spawn_fill(corpse: RigidBody2D) -> void:
 		# Вид ровно как у трупа: тот же арт и тот же offset (начало координат — низ силуэта).
 		fill.texture = src.texture
 		fill.offset = src.offset
-	# Плоско: только зеркало по X (случайно) и разброс наклона. Низ силуэта — на дне ячейки (на
-	# bottom_overlap_px выше дна), центр по X — центр ячейки плюс случайный сдвиг.
-	var mirror := -1.0 if randf() < 0.5 else 1.0
+	# Направление взгляда берём у самого трупа: его узел Visual зеркалён по X (_mirror в Corpse.gd),
+	# поэтому картинка смотрит туда же, куда смотрел труп, а не отзеркаливается случайно. Плюс
+	# разброс наклона. Низ силуэта — на дне ячейки (на bottom_overlap_px выше дна), центр по X —
+	# центр ячейки плюс случайный сдвиг.
+	var mirror := 1.0
+	var corpse_visual := corpse.get_node_or_null("Visual") as Node2D
+	if corpse_visual != null and corpse_visual.scale.x < 0.0:
+		mirror = -1.0
 	fill.scale = Vector2(mirror * art_scale, art_scale)
 	fill.rotation_degrees = randf_range(-tilt_jitter, tilt_jitter)
 	fill.position = Vector2(section_width * 0.5 + randf_range(-x_jitter, x_jitter),

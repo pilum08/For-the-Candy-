@@ -239,19 +239,34 @@ func _spawn_corpse() -> void:
 	if corpse_scene == null:
 		return
 	var corpse := corpse_scene.instantiate()
-	get_tree().current_scene.add_child(corpse)
-	corpse.global_position = global_position
+	# Ввод трупа в мир откладываем: смерть приходит и из сигнала физики (ядро/касание), а добавлять
+	# тело с коллизией во время физического опроса (flushing queries) Godot запрещает — тот же
+	# приём, что в MobSpawner._place_mob.
+	_enter_corpse.call_deferred(get_tree().current_scene, corpse, global_position, visual.art_scale(), _look, _knock_velocity)
+
+
+## Ввести готовый труп в мир: добавить к миру, поставить в точку падения и отдать ему вид, взгляд и
+## откат. Зовётся ОТЛОЖЕННО из _spawn_corpse — см. там про flushing queries.
+func _enter_corpse(world: Node, corpse: Node2D, at: Vector2, art_scale: float, look: int, knock: Vector2) -> void:
+	if world == null:
+		corpse.queue_free()   # мира нет (сцена без корня) — класть труп некуда
+		return
+	world.add_child(corpse)
+	corpse.global_position = at
 	if corpse.has_method("setup"):
-		corpse.call("setup", visual.art_scale(), _look, _knock_velocity)
+		corpse.call("setup", art_scale, look, knock)
 
 
 ## Вместо трупа (лимит исчерпан): моб разлетается на части (MobDeathBurst.gd). Узел живёт
 ## дочерним у врага и уходит вместе с ним; обломки кладутся в мир и гаснут, уехав за экран.
+## Сам разлёт зовём ОТЛОЖЕННО: смерть приходит и из сигнала физики (ядро/касание), а добавлять
+## тела-обломки с коллизией во время физического опроса (flushing queries) Godot запрещает —
+## тот же приём, что в _spawn_corpse / MobSpawner._place_mob.
 func _burst_parts() -> void:
 	var burst := MobDeathBurst.new() as Node2D
 	burst.name = "MobDeathBurst"
 	add_child(burst)
-	burst.call(&"burst", rig(), global_position, visual.art_scale(), _look)
+	burst.call_deferred(&"burst", rig(), global_position, visual.art_scale(), _look)
 
 
 # ============================================================================

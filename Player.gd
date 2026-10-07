@@ -451,10 +451,6 @@ func _shoot() -> void:
 	var dir := get_global_mouse_position() - origin
 	if dir.length_squared() < 1.0:
 		dir = Vector2(float(_facing), 0.0)
-	# ВРЕМЕННО (диагностика «ЛКМ при трупе в руках»): появилось в консоли — снаряд правда
-	# создан. Это и есть точка создания снаряда, строки ниже. Убрать по команде.
-	print("[SHOOT] снаряд создан | is_carrying=%s is_dead=%s _carried=%s" % [is_carrying, is_dead, _carried])
-	print_stack()
 	var shot := projectile_scene.instantiate()
 	shot.art_scale = art_scale
 	get_tree().current_scene.add_child(shot)
@@ -767,8 +763,10 @@ func die() -> void:
 	# --- 4. Обломки падают и лежат до перезапуска: таймера удаления нет ----------------
 	# --- 5. Перезапуск сцены (бывшая заглушка respawn_delay — теперь в общем времени смерти)
 	await get_tree().create_timer(maxf(death_total_time - death_hold_time, 0.0) + respawn_delay).timeout
-	# Сцена перезагружается сама; при F6 (герой без сцены) молча выходим.
-	if get_tree().current_scene != null:
+	# Сцена перезагружается сама; при F6 (герой без сцены) молча выходим. Узел мог уже покинуть
+	# дерево (сцену успел перезагрузить другой путь, напр. LevelController.fail) — тогда молчим.
+	# is_inside_tree() проверяем ПЕРВЫМ: get_tree() вне дерева в отладочной сборке тоже ругается.
+	if is_inside_tree() and get_tree().current_scene != null:
 		get_tree().reload_current_scene()
 
 

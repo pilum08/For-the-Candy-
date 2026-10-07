@@ -20,9 +20,9 @@
 - `enemy_yellow.tres` — паспорт жёлтого моба
 
 ## Предметы и снаряды
-- `Cannon.gd` — пушка: носится, стреляет ядром, ломается и покидает руки ПОСЛЕ анимации выстрела (сигнал CannonFire.animation_finished); группа `carryables`. @export: ball_scene, ball_data, carry_offset, fall_fail_depth
+- `Cannon.gd` — пушка: носится, наводится дулом за курсором в руках (только `Body`), стреляет ядром по углу дула, ломается и покидает руки ПОСЛЕ анимации выстрела (сигнал CannonFire.animation_finished), после чего падает сквозь землю и удаляется за экраном; группа `carryables`. @export: ball_scene, ball_data, carry_offset, fall_fail_depth, aim_up_limit_deg, aim_down_limit_deg, aim_speed_deg
 - `Cannon.tscn` — сцена пушки
-- `CannonFire.gd` — вспышка/дымок из дула в момент выстрела (ставит и масштабирует Cannon); в конце шлёт `animation_finished` — по нему пушка ломается. @export: fire_textures, smoke_textures, fire_offsets, smoke_offsets, fire_frame_duration, smoke_frame_duration, fire_frame_durations, smoke_frame_durations, smoke_delay, post_animation_delay
+- `CannonFire.gd` — вспышка/дымок из дула в момент выстрела (ставит, масштабирует и поворачивает Cannon по углу дула — `setup(art_scale, mirror, fire_rotation)`); в конце шлёт `animation_finished` — по нему пушка ломается. @export: fire_textures, smoke_textures, fire_offsets, smoke_offsets, fire_frame_duration, smoke_frame_duration, fire_frame_durations, smoke_frame_durations, smoke_delay, post_animation_delay
 - `CannonFire.tscn` — сцена вспышки (спрайты Fire, Smoke)
 - `Spear.gd` / `Spear.tscn` — копьё-находка за упавшей башней: RigidBody2D, слой 7 «обломки», маска «земля», группа `carryables`; pickup/put_down/use_action — заготовка (подобрать нельзя). @export: native_mult, size_mult, carry_offset, carried_scale_mult, carry_speed_mult
 - `Projectile.gd` — снаряд по дуге: попадание/промах. signals hit_target, hit_tower, missed

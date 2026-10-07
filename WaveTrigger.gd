@@ -179,9 +179,9 @@ func _lower_wall() -> void:
 ## Половина видимой области в пикселях МИРА: видимый прямоугольник, делённый на зум камеры
 ## (формула скопирована у MobSpawner._visible_half — считать кромки экрана надо одинаково).
 func _visible_half() -> Vector2:
-	var visible := Vector2(get_viewport().get_visible_rect().size)
+	var visible_size := Vector2(get_viewport().get_visible_rect().size)
 	var zoom := Vector2(maxf(_cam.zoom.x, 0.001), maxf(_cam.zoom.y, 0.001))
-	return visible * 0.5 / zoom
+	return visible_size * 0.5 / zoom
 
 
 # ============================================================================

@@ -22,9 +22,6 @@ size = Vector2(530, 120)
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_groundR"]
 size = Vector2(2932, 120)
 
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_wave_wall"]
-size = Vector2(120, 2400)
-
 [node name="World" type="Node2D" unique_id=659129046]
 
 [node name="Ground" type="StaticBody2D" parent="." unique_id=345283093]
@@ -60,12 +57,6 @@ position = Vector2(-1130, 0)
 [node name="Fortification" type="Node2D" parent="." unique_id=828071248]
 position = Vector2(850, 0)
 
-[node name="Visual" type="ColorRect" parent="Fortification" unique_id=1105537937]
-offset_left = -70.0
-offset_top = -620.0
-offset_right = 70.0
-color = Color(0.34, 0.31, 0.36, 1)
-
 [node name="Label" type="Label" parent="Fortification" unique_id=1849723312]
 offset_left = -190.0
 offset_top = -710.0
@@ -76,12 +67,12 @@ text = "Укрепление"
 horizontal_alignment = 1
 
 [node name="Tower" parent="." unique_id=1131248360 instance=ExtResource("13_tower")]
-position = Vector2(1801, 13)
+position = Vector2(1833, 13)
 group_size = 2
 spawner = NodePath("../MobSpawner")
 
 [node name="Player" parent="." unique_id=1694100496 instance=ExtResource("1_efxa6")]
-position = Vector2(-653, -234)
+position = Vector2(-1573, -77)
 idle_pose_fps = 2.0
 shoot_cooldown = 0.5
 death_hold_time = 0.2
@@ -108,16 +99,7 @@ position = Vector2(750, 0)
 monitoring = false
 wave_manager = NodePath("../WaveManager")
 camera = NodePath("../Player/Camera")
-left_wall = NodePath("../PlayersWall")
-
-[node name="PlayersWall" type="StaticBody2D" parent="." unique_id=554725277 groups=["wave_wall"]]
-position = Vector2(430, 0)
-collision_layer = 4
-collision_mask = 0
-
-[node name="Shape" type="CollisionShape2D" parent="PlayersWall" unique_id=53390229]
-shape = SubResource("RectangleShape2D_wave_wall")
-disabled = true
+left_wall = NodePath("")
 
 [node name="MobSpawner" type="Node" parent="." unique_id=364961159 groups=["mob_spawner"]]
 script = ExtResource("5_spawner")
@@ -133,4 +115,4 @@ spawner = NodePath("../MobSpawner")
 script = ExtResource("14_level")
 
 [node name="Cannon" parent="." unique_id=467123817 instance=ExtResource("15_cannon")]
-position = Vector2(-1750, 0)
+position = Vector2(-1624, -2)

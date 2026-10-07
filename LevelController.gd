@@ -80,8 +80,10 @@ func fail(reason: String) -> void:
 	_stop_tower_spawning()
 	level_failed.emit(reason)
 	await get_tree().create_timer(maxf(fail_reload_delay, 0.0)).timeout
-	# F6 (герой без уровня) — перезагружать нечего, молча выходим (как Player.die).
-	if get_tree().current_scene != null:
+	# F6 (герой без уровня) — перезагружать нечего, молча выходим (как Player.die). Узел мог уже
+	# покинуть дерево (сцену успел перезагрузить другой путь, напр. смерть героя) — тогда молчим.
+	# is_inside_tree() проверяем ПЕРВЫМ: get_tree() вне дерева в отладочной сборке тоже ругается.
+	if is_inside_tree() and get_tree().current_scene != null:
 		get_tree().reload_current_scene()
 
 
@@ -98,7 +100,10 @@ func _connect_tower() -> void:
 	if not tower.has_signal(&"destroyed"):
 		push_warning("LevelController: у башни нет сигнала destroyed — победа по разрушению не сработает.")
 		return
-	tower.connect(&"destroyed", win)
+	# Tower в _ready уже подписывает свой destroyed на win() (см. Tower._connect_level_controller),
+	# и в main.tscn он идёт раньше контроллера — повторное connect() даёт ошибку «already connected».
+	if not tower.is_connected(&"destroyed", win):
+		tower.connect(&"destroyed", win)
 
 
 ## Остановить спавн башни (мобов из её двери): у живой башни метод есть. Уже выпущенные мобы

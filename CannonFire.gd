@@ -70,9 +70,13 @@ var _art_scale: float = 1.0
 var _sign: float = 1.0
 
 
-## Масштаб и зеркало эффекта ставит пушка при создании: art_scale — мировой масштаб
-## (ArtScale.scale_of у пушки), mirror — true, если выстрел смотрит вправо (тогда отражаем по x).
-func setup(art_scale: float, mirror: bool) -> void:
+## Масштаб, зеркало и поворот эффекта ставит пушка при создании: art_scale — мировой масштаб
+## (ArtScale.scale_of у пушки), mirror — true, если смещения и спрайты надо отразить по x (сейчас,
+## когда пушка передаёт fire_rotation, зеркало не нужно и приходит false), fire_rotation — угол дула
+## (Cannon: body.global_rotation). Он кладётся на корень эффекта, поэтому вспышка и дым поворачиваются
+## вместе с наведённым дулом; корень остаётся scale = ONE — крутим только rotation.
+func setup(art_scale: float, mirror: bool, fire_rotation: float = 0.0) -> void:
+	rotation = fire_rotation
 	var s := absf(art_scale)
 	if s <= 0.0:
 		s = 1.0

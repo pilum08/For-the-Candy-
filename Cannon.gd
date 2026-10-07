@@ -29,6 +29,12 @@ extends RigidBody2D
 ## В руках размер компенсируется масштабом гнезда носильщика, а зеркало в руках даёт сам
 ## носильщик (гнездо лежит внутри его Visual) — ровно как это делает Corpse.
 ##
+## НАВЕДЕНИЕ (только в руках): дуло (узел Body) доворачивается за курсором вверх-вниз в пределах
+## aim_up_limit_deg / aim_down_limit_deg со скоростью aim_speed_deg (0 — мгновенно, см. _update_aim).
+## Крутится ТОЛЬКО дочерний Body — корень RigidBody2D не вращаем, иначе поедет физика. Ядро летит
+## строго по углу дула (Body.global_rotation), и вспышка CannonFire поворачивается вместе с ним.
+## Не в руках — Body.rotation = 0 (дуло ровно).
+##
 ## ПОТЕРИ ПУШКИ ДВЕ: упала ниже уровня старта больше чем на fall_fail_depth (пушка потеряна) и
 ## промах выстрелом (см. выше). Упавшую проверяем только пока пушка цела и не стреляла — сломанный
 ## хлам уже не важен. Контроллера уровня в сцене нет — предупреждение в консоль, дальше ничего.
@@ -71,6 +77,14 @@ const ProjectileData := preload("res://ProjectileData.gd")
 ## Множитель скорости ходьбы носильщика, пока пушка в руках.
 @export_range(0.05, 1.0, 0.05) var carry_speed_mult: float = 0.7
 
+@export_group("Наведение")
+## Максимальный подъём дула вверх от горизонтали, градусы: насколько дуло может задраться.
+@export var aim_up_limit_deg: float = 45.0
+## Максимальное опускание дула вниз, градусы (0 — ровно горизонтально, ниже не опускается).
+@export var aim_down_limit_deg: float = 0.0
+## Скорость доворота дула за курсором, градусы/с (0 — мгновенно, без плавности).
+@export var aim_speed_deg: float = 360.0
+
 @export_group("Потеря")
 ## На сколько пикселей ниже уровня старта должна оказаться пушка, чтобы считаться потерянной.
 @export var fall_fail_depth: float = 80.0
@@ -99,10 +113,9 @@ const ProjectileData := preload("res://ProjectileData.gd")
 @export var break_impulse: Vector2 = Vector2(260.0, -180.0)
 ## Скорость кувырка сломанной пушки, рад/с (знак случаен).
 @export var break_spin: float = 8.0
-## Слой сломанной пушки: 64 = слой 7 «обломки» (как у Debris).
+## Слой сломанной пушки: 64 = слой 7 «обломки» (как у Debris). Маска у сломанной пушки всегда 0
+## (см. _break_free): хлам ни с чем не сталкивается, падает сквозь землю и удаляется за экраном.
 @export var broken_layer: int = 64
-## Маска сломанной пушки: 4 = слой 3 «земля»; герой, враги и снаряды её не замечают.
-@export var broken_mask: int = 4
 
 @export_group("Исход выстрела")
 ## Что сказать игроку, если ядро ушло впустую (земля/стена, конец времени жизни, край экрана).
@@ -154,9 +167,39 @@ func _ready() -> void:
 	_connect_tower()
 
 
-## Каждый физический кадр — только слежение за падением (см. _check_fall).
-func _physics_process(_delta: float) -> void:
+## Каждый физический кадр — слежение за падением (см. _check_fall) и доворот дула за курсором
+## (см. _update_aim).
+func _physics_process(delta: float) -> void:
 	_check_fall()
+	_update_aim(delta)
+
+
+## Доворот дула за курсором — только пока пушка в руках (_carrier != null). Крутим ТОЛЬКО дочерний
+## Body: корень RigidBody2D не вращаем, иначе поедет физика. Направление считаем в ЛОКАЛЬНЫХ осях
+## пушки: зеркало героя живёт в scale.x его Visual (выше корня пушки), поэтому знак x берём у
+## body.global_scale — тем же приёмом Player._update_aim переводит курсор через _facing. Вертикаль
+## ограничена aim_up_limit_deg (вверх, минус) / aim_down_limit_deg (вниз, плюс), скорость —
+## aim_speed_deg (0 — мгновенно). Не в руках — дуло ровно (Body.rotation = 0).
+func _update_aim(delta: float) -> void:
+	if _carrier == null:
+		body.rotation = 0.0
+		return
+	var facing := signf(body.global_scale.x)
+	if is_zero_approx(facing):
+		facing = 1.0
+	var aim_vec := get_global_mouse_position() - muzzle.global_position
+	var local_dir := Vector2(aim_vec.x * facing, aim_vec.y)
+	if local_dir.length_squared() < 1.0:
+		local_dir = Vector2(1.0, 0.0)
+	var target := clampf(
+		local_dir.angle(),
+		-deg_to_rad(aim_up_limit_deg),
+		deg_to_rad(aim_down_limit_deg)
+	)
+	if aim_speed_deg <= 0.0:
+		body.rotation = target
+	else:
+		body.rotation = move_toward(body.rotation, target, deg_to_rad(aim_speed_deg) * delta)
 
 
 # ============================================================================
@@ -239,6 +282,15 @@ func put_down(world_position: Vector2) -> void:
 	if _carrier == null:
 		return
 	_carrier = null
+	# Возврат физики откладываем: put_down приходит и из сигнала физики (смерть героя на шипах,
+	# касание врага), а менять состояние тела прямо внутри разбора физики Godot запрещает —
+	# поэтому в Player.die() и Tower._on_activation_body_entered стоит set_deferred.
+	_apply_put_down.call_deferred(world_position)
+
+
+## Тело put_down (см. выше): возврат прежних слоёв, физики и порядка отрисовки, постановка на
+## мировую точку. Отдельным методом и отложенно — состояние тела меняем вне фазы разбора физики.
+func _apply_put_down(world_position: Vector2) -> void:
 	if _home_parent != null and is_instance_valid(_home_parent):
 		reparent(_home_parent)
 		# reparent() добавляет узел в конец списка детей, а порядок списка — это порядок
@@ -251,6 +303,7 @@ func put_down(world_position: Vector2) -> void:
 	collision_mask = _saved_mask
 	scale = Vector2.ONE
 	rotation = 0.0
+	body.rotation = 0.0   # дуло больше не наводится — в мире пушка стоит ровно
 	linear_velocity = Vector2.ZERO
 	angular_velocity = 0.0
 	global_position = world_position
@@ -262,24 +315,24 @@ func put_down(world_position: Vector2) -> void:
 # ============================================================================
 # ВЫСТРЕЛ (ЛКМ)
 # ============================================================================
-## ЛКМ с пушкой в руках: выстрел ядром из дула в сторону курсора. Пушка одноразовая — флаг _used,
-## поэтому второй ЛКМ уже ничего не делает. Порядок важен: вспышка и ядро — сразу (дуло ещё в руках,
-## точка вылета — как в этот момент), а слом — ТОЛЬКО ПОСЛЕ анимации выстрела: пока CannonFire играет
-## вспышку и дым, пушка остаётся в руках и уезжает из CarryPoint лишь по его сигналу
-## animation_finished (см. _on_fire_finished). Player тогда же в том же такте возвращает руки.
-func use_action(aim_point: Vector2) -> void:
+## ЛКМ с пушкой в руках: выстрел ядром из дула по углу наведения (см. _update_aim). Пушка
+## одноразовая — флаг _used, поэтому второй ЛКМ уже ничего не делает. Порядок важен: вспышка и
+## ядро — сразу (дуло ещё в руках, точка вылета — как в этот момент), а слом — ТОЛЬКО ПОСЛЕ анимации
+## выстрела: пока CannonFire играет вспышку и дым, пушка остаётся в руках и уезжает из CarryPoint
+## лишь по его сигналу animation_finished (см. _on_fire_finished). Player тогда же в том же такте
+## возвращает руки. Курсор сюда приходит лишь для совместимости с интерфейсом carryables: дуло уже
+## наведено за ним, поэтому ядро летит строго по углу дула, а не «прямо на курсор».
+func use_action(_aim_point: Vector2) -> void:
 	if _used or _carrier == null:
 		return
 	_used = true
-	# Стреляем от дула: его мировая позиция и есть точка вылета. В руках дуло зеркалится вместе с
-	# Visual носильщика, поэтому направление на курсор «влево/вправо» учитывается само.
+	# Стреляем от дула: точка вылета — мировой muzzle, а направление — строго по углу дула (Body).
+	# Vector2.RIGHT.rotated(body.global_rotation) верен и при зеркале (взгляд влево): тогда
+	# body.global_rotation ≈ π − угол дула, и поворот RIGHT даёт направление видимого дула.
 	var from := muzzle.global_position
-	var to_aim := aim_point - from
-	if to_aim.length_squared() < 1.0:
-		to_aim = Vector2.RIGHT if aim_point.x >= from.x else Vector2.LEFT
-	var dir := to_aim.normalized()
+	var dir := Vector2.RIGHT.rotated(body.global_rotation)
 	# Вспышка/дым — в точке дула, пока пушка ещё в руках (со сломом она уедет из CarryPoint).
-	var effect := _spawn_fire(dir)
+	var effect := _spawn_fire()
 	_fire(from, dir)
 	_shake_camera()
 	# Пушка ломается и покидает руки не сразу, а когда отыграет анимация выстрела. Эффекта нет (нет
@@ -327,10 +380,11 @@ func _fire(from: Vector2, dir: Vector2) -> void:
 	_ball.call(&"launch", dir)
 
 
-## Выстрел сделан — пушка выпадает из рук и остаётся сломанной навсегда: картинка cannon_broken.png,
-## слои обломков, толчок вперёд и кувырок. Она уходит из группы "carryables" (E её больше не видит)
-## и уезжает из CarryPoint: Player в том же такте замечает, что рука пуста (is_carrying = false), —
-## и снова может стрелять камнем и подбирать предметы.
+## Выстрел сделан — пушка выпадает из рук и становится сломанным хламом: картинка cannon_broken.png,
+## слой обломков, толчок вперёд и кувырок. Маска при этом 0 — хлам ни с чем не сталкивается, падает
+## сквозь землю и удаляется, уехав за экран (как обломки моба). Она уходит из группы "carryables"
+## (E её больше не видит) и уезжает из CarryPoint: Player в том же такте замечает, что рука пуста
+## (is_carrying = false), — и снова может стрелять камнем и подбирать предметы.
 func _break_free(dir: Vector2) -> void:
 	remove_from_group(&"carryables")
 	if broken_texture != null:
@@ -345,9 +399,11 @@ func _break_free(dir: Vector2) -> void:
 	_home_parent = null
 	freeze = false
 	collision_layer = broken_layer
-	collision_mask = broken_mask
+	# Маска 0: сломанный хлам ни с чем не сталкивается и падает сквозь землю (как обломки моба).
+	collision_mask = 0
 	scale = Vector2.ONE
 	rotation = 0.0
+	body.rotation = 0.0   # сломанный рисунок встаёт ровно, дуло больше не наводится
 	z_index = _saved_z_index
 	z_as_relative = _saved_z_relative
 	_apply_size()   # пересчитываем размер: картинка сломанной пушки другая
@@ -355,16 +411,23 @@ func _break_free(dir: Vector2) -> void:
 	var forward := 1.0 if dir.x >= 0.0 else -1.0
 	linear_velocity = Vector2(break_impulse.x * forward, break_impulse.y)
 	angular_velocity = randf_range(-absf(break_spin), absf(break_spin))
+	# Уехал за экран — хлам больше не нужен: удаляем себя (как обломки моба, MobDeathBurst).
+	var notifier := VisibleOnScreenNotifier2D.new()
+	notifier.name = "ScreenExit"
+	notifier.rect = Rect2(-200.0, -200.0, 400.0, 400.0)
+	add_child(notifier)
+	notifier.screen_exited.connect(queue_free)
 
 
 # ============================================================================
 # ЭФФЕКТЫ ВЫСТРЕЛА (вспышка из дула, дым, тряска камеры)
 # ============================================================================
-## Вспышка из дула: CannonFire.tscn в мировой точке дула. Масштаб — как у пушки (ArtScale), зеркало
-## — по направлению выстрела (dir.x >= 0 — смотрит вправо). Эффект сам себя удалит, когда отыграет,
-## но сперва пришлёт animation_finished — по нему пушка и ломается (см. use_action). Узел возвращаем,
-## чтобы use_action подписался на сигнал; эффекта нет — null.
-func _spawn_fire(dir: Vector2) -> Node:
+## Вспышка из дула: CannonFire.tscn в мировой точке дула. Масштаб — как у пушки (ArtScale), а
+## направление — поворотом всего эффекта на угол дула (body.global_rotation), поэтому зеркало не
+## нужно (mirror = false): вспышка и дым поворачиваются вместе с наведённым дулом. Эффект сам себя
+## удалит, когда отыграет, но сперва пришлёт animation_finished — по нему пушка и ломается
+## (см. use_action). Узел возвращаем, чтобы use_action подписался на сигнал; эффекта нет — null.
+func _spawn_fire() -> Node:
 	if fire_scene == null:
 		return null
 	var effect := fire_scene.instantiate() as Node2D
@@ -373,7 +436,7 @@ func _spawn_fire(dir: Vector2) -> Node:
 	get_tree().current_scene.add_child(effect)
 	effect.global_position = muzzle.global_position
 	if effect.has_method(&"setup"):
-		effect.call(&"setup", ArtScale.scale_of(native_mult, size_mult), dir.x < 0.0)
+		effect.call(&"setup", ArtScale.scale_of(native_mult, size_mult), false, body.global_rotation)
 	return effect
 
 

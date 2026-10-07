@@ -61,8 +61,8 @@ func _ready() -> void:
 func build(data: MobRigData) -> void:
 	rig = data
 	_clear()
-	for part: Dictionary in rig.parts:
-		_add_part(part)
+	for part_data: Dictionary in rig.parts:
+		_add_part(part_data)
 	_face = _node(FACE_PART) as Sprite2D
 	_face_idle = null
 	_face_damage = null
@@ -87,9 +87,9 @@ func build(data: MobRigData) -> void:
 
 ## Одна часть: сустав по attach_pos, спрайт — на самом суставе (offset = -pivot_px).
 ## Дети крепятся к родителю по имени родительской части; "" и неизвестный родитель — корень.
-func _add_part(part: Dictionary) -> void:
-	var part_name: String = part["name"]
-	var path: String = part["texture"]
+func _add_part(part_data: Dictionary) -> void:
+	var part_name: String = part_data["name"]
+	var path: String = part_data["texture"]
 	# Лицо может быть задано только в face_idle: тогда часть всё равно собираем спрайтом.
 	if part_name == FACE_PART and path.is_empty():
 		path = rig.face_idle
@@ -101,12 +101,12 @@ func _add_part(part: Dictionary) -> void:
 		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		sprite.texture = _texture(path)
 		sprite.centered = false
-		sprite.offset = -(part["pivot_px"] as Vector2)
+		sprite.offset = -(part_data["pivot_px"] as Vector2)
 		node = sprite
 	node.name = part_name
-	node.z_index = part.get("z_index", 0)
-	node.position = part["attach_pos"]
-	var parent_name: String = part["parent"]
+	node.z_index = part_data.get("z_index", 0)
+	node.position = part_data["attach_pos"]
+	var parent_name: String = part_data["parent"]
 	var parent: Node2D = self
 	if not parent_name.is_empty():
 		if _parts.has(parent_name):
@@ -117,7 +117,7 @@ func _add_part(part: Dictionary) -> void:
 	_parts[part_name] = {
 		"node": node,
 		"key": _pose_key(part_name),
-		"attach": part["attach_pos"] as Vector2,
+		"attach": part_data["attach_pos"] as Vector2,
 	}
 
 

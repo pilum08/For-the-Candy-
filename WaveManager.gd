@@ -166,7 +166,9 @@ func _run_waves() -> void:
 	_running = false   # волны кончились: start() снова разрешён (уровень/триггер может перезапустить)
 	if reload_on_victory:
 		await get_tree().create_timer(maxf(victory_reload_delay, 0.0)).timeout
-		if get_tree().current_scene != null:
+		# Узел мог покинуть дерево за время паузы (герой погиб и перезагрузил сцену) — тогда молчим.
+		# is_inside_tree() проверяем ПЕРВЫМ: get_tree() вне дерева в отладочной сборке тоже ругается.
+		if is_inside_tree() and get_tree().current_scene != null:
 			get_tree().reload_current_scene()
 
 
